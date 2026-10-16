@@ -1,0 +1,59 @@
+# prod(AWS EKS) backend Helm values — 모노레포 backend-deploy/charts/backend 의 values.yaml 을 덮어씁니다.
+# 차트 버전은 같은 폴더의 chart.yaml 에 고정되어 있습니다.
+#
+# ⚠️ 이 레포는 public 입니다. 비밀번호·키·토큰은 절대 넣지 않습니다 (README "비밀값").
+#    Secret(global.secretName) 은 클러스터에서 AWS Secrets Manager → External Secrets 로 만듭니다.
+#
+# global.imageTag 는 GitLab main 파이프라인이 ECR push 후 여는 PR 로 갱신됩니다 — 사람이 리뷰·승인 후 merge.
+
+global:
+  # Terraform 11-registry: <account>.dkr.ecr.<region>.amazonaws.com / team04-hotel/<서비스>
+  imageRegistry: "<account-id>.dkr.ecr.us-east-1.amazonaws.com"   # TODO: prod 계정 ID
+  imageRepositoryPrefix: team04-hotel/
+  # 커밋 SHA (latest 금지 — 차트가 렌더링을 거부, ECR 도 IMMUTABLE)
+  imageTag: "00000000"   # TODO: 첫 배포 이미지 태그 (GitLab 이 PR 로 갱신)
+  # ECR 은 노드 IAM 역할로 pull → imagePullSecret 불필요
+  imagePullSecrets: []
+  secretName: backend-secrets
+
+# api-gateway 외부 노출 — EKS: AWS Load Balancer Controller (ALB, target-type ip). Traefik/NodePort 아님
+ingress:
+  enabled: true
+  className: alb
+  host: ""   # TODO: api 도메인 (예: api.team04-hotel-prod.kro.kr)
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    # TODO: 인증서 ARN / WAF / 그룹 이름 등은 Terraform 80-main-edge 와 맞춰 채움
+  paths:
+    - /api
+
+services:
+  api-gateway:
+    replicas: 2
+    env:
+      CORS_ORIGIN: "https://www.team04-hotel-prod.kro.kr"   # TODO: 실제 프론트 도메인
+      # 결제 서버는 결제 VPC — 메인 VPC 의 PrivateLink 인터페이스 엔드포인트 DNS 로 호출 (60-payment-app)
+      PAYMENT_SERVICE_HOST: "<payment-endpoint-dns>:3004"   # TODO
+  booking-service:
+    replicas: 2
+    env:
+      PAYMENT_SERVICE_HOST: "<payment-endpoint-dns>:3004"   # TODO
+      # 결제 결과 이벤트 (SQS FIFO, 43-messaging). SQS_ENDPOINT 비움 = AWS 기본 주소, 자격증명은 IAM 역할(IRSA)
+      SQS_ENDPOINT: ""
+      SQS_REGION: us-east-1
+      PAYMENT_RESULT_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/<account-id>/payment-result.fifo"   # TODO
+  # prod 는 결제 VPC 의 결제 서버(EKS 밖)가 운영 → 클러스터에는 배포하지 않음. 이미지 태그는 envs/prod/payment
+  payment-service:
+    enabled: false
+  # prod 는 실제 PG(토스)를 결제 서버가 직접 호출 → 목업 불필요
+  pg-mock-service:
+    enabled: false
+
+migrations:
+  # 메인 DB(RDS, 41-main-data) — 배포 직전 hook 으로 Flyway 적용
+  main:
+    enabled: true
+  # 결제 DB 는 결제 서버 쪽에서 적용 (클러스터에서 결제 DB 에 접근하지 않음)
+  payment:
+    enabled: false

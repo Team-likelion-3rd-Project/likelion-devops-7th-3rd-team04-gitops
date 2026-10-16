@@ -1,0 +1,5 @@
+# CODEOWNERS — 팀원 전원이 모든 경로의 소유자(리뷰어)입니다.
+# ruleset 의 "Require review from Code Owners" + "승인 1명" 규칙으로,
+# PR 작성자를 제외한 팀원 1명 이상이 승인해야 merge 됩니다 (작성자 본인 승인은 인정되지 않음).
+
+*    @rbsxo135 @wkdtpgns5016 @kimjhn4188-ctrl @jack7051105

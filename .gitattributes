@@ -1,0 +1,2 @@
+# 줄바꿈은 항상 LF 로 저장 (Windows 의 core.autocrlf 와 무관하게 — 셸 스크립트가 CRLF 면 Actions 에서 실행 실패)
+* text=auto eol=lf

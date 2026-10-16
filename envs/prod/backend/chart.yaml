@@ -1,0 +1,11 @@
+# prod backend 가 쓰는 Helm 차트의 위치 (모노레포의 backend-deploy/charts/backend).
+#
+# revision 은 반드시 모노레포의 "커밋 SHA(40자)" 로 고정합니다 — 브랜치 이름(develop/main) 금지.
+# 브랜치를 가리키면 모노레포의 차트 변경이 이 레포의 PR 없이 prod 에 반영됩니다.
+# 차트를 바꾸려면: 모노레포 main 에 차트 변경 merge → 그 커밋 SHA 로 이 값을 바꾸는 PR.
+#
+# 지금(ArgoCD 도입 전)은 PR 검증(validate.yml)과 배포 도구가 이 값을 읽고,
+# ArgoCD 도입 후에는 argocd/apps/backend.yaml 의 첫 번째 source(targetRevision) 로 옮깁니다 (README "ArgoCD 도입 시").
+repo: https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team04.git
+path: backend-deploy/charts/backend
+revision: "0000000000000000000000000000000000000000"   # TODO: prod 에 처음 배포할 모노레포 main 커밋 SHA
