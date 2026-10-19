@@ -6,6 +6,8 @@
 - [ ] backend 차트 고정 (`envs/prod/backend/chart.yaml` 의 `revision`)
 - [ ] backend 설정 (`envs/prod/backend/values.yaml` 의 그 외 값)
 - [ ] 결제 서버 (`envs/prod/payment/values.yaml`)
+- [ ] 클러스터 서비스 (`envs/prod/traefik`, `envs/prod/whoami` 등 — 원본: 모노레포 `infra/gitops/prod`)
+- [ ] 앱 추가 · 삭제 · 순서 (`envs/prod/*/chart.yaml`) — 폴더를 지워도 릴리스는 삭제되지 않음 (`helm uninstall` 필요)
 - [ ] 레포 규칙 · 검증 (`.github/`, `scripts/`)
 
 ## 무엇을 · 왜

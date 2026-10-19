@@ -1,0 +1,8 @@
+# 수직 경로(ALB → 워커 NodePort → Traefik → 파드) 검증용 테스트 백엔드.
+# api-gateway 가 경로 검증을 대신하게 되면 이 폴더를 지운다 (agent 는 지운 앱의 릴리스를 삭제하지 않는다 — README)
+type: local
+path: chart   # 이 폴더 기준
+namespace: whoami
+release: whoami
+# Traefik 의 IngressClass 를 쓴다
+order: 20

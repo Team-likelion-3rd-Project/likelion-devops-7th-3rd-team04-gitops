@@ -1,0 +1,11 @@
+# Traefik Ingress Controller — 워커 NodePort 30080 으로 80-main-edge ALB 트래픽을 받는다.
+# 차트를 올릴 때는 Traefik chart Changelog 의 breaking change 를 확인한다.
+# 온프레미스(infra/ansible group_vars/control_plane.yml traefik_chart_version)와 같은 버전을 쓴다
+type: helm
+repo: https://traefik.github.io/charts
+chart: traefik
+version: "41.6.1"   # Traefik v3.7.13
+namespace: traefik
+release: traefik
+# 다른 앱의 Ingress 가 이 IngressClass 를 쓰므로 먼저 적용한다
+order: 10

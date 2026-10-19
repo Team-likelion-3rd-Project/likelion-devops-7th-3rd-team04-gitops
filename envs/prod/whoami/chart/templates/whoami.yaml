@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whoami
+  labels:
+    app.kubernetes.io/name: whoami
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: whoami
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: whoami
+    spec:
+      containers:
+        - name: whoami
+          image: {{ .Values.image | quote }}
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: whoami
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  selector:
+    app.kubernetes.io/name: whoami
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: whoami
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  ingressClassName: traefik
+  rules:
+    # host 규칙 없음 — 워커 IP · ALB DNS 어느 쪽으로 접속해도 라우팅.
+    # whoami 는 요청 헤더를 그대로 돌려주므로 / 전체가 아닌 /whoami 만 연다 (다른 경로는 Traefik 404)
+    - http:
+        paths:
+          - path: /whoami
+            pathType: Prefix
+            backend:
+              service:
+                name: whoami
+                port:
+                  name: http
