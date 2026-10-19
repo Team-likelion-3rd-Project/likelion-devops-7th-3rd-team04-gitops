@@ -11,6 +11,10 @@ config:
       "external-secrets/external-secrets":
         RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-external-secrets"
         Audience: sts.amazonaws.com
+      # 결제 결과 큐(43-messaging) 수신. SA 는 backend 차트가 만든다
+      "backend/booking-service":
+        RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-booking-service"
+        Audience: sts.amazonaws.com
 
 # 파드 생성마다 호출되므로 워커 2대에 나눠 띄운다
 replicaCount: 2
