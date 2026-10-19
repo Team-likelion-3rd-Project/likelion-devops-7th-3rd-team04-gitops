@@ -37,7 +37,8 @@ for dir in "${APPS[@]}"; do
   case "$type" in
     helm)
       [[ "$(field "$dir" '.chart // ""')" != "" ]] || fail "$app: chart 가 필요합니다"
-      [[ "$(field "$dir" '.version // ""')" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || fail "$app: version 은 고정 버전이어야 합니다"
+      # cert-manager 처럼 차트 버전에 v 가 붙는 차트가 있다 (v 를 떼면 helm 이 가장 가까운 버전으로 대체)
+      [[ "$(field "$dir" '.version // ""')" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+ ]] || fail "$app: version 은 고정 버전이어야 합니다"
       [[ "$(field "$dir" '.chart')" == oci://* || "$(field "$dir" '.repo // ""')" != "" ]] || fail "$app: repo 가 필요합니다"
       ;;
     git)
@@ -71,11 +72,17 @@ done
 
 echo "== 3) helm template"
 mkdir -p "$WORK/rendered"
+# clusterValues: true 인 앱은 배포 agent 가 클러스터 값(계정 ID 등)을 더 넘긴다. 검증은 더미 값으로 한다.
+# 숫자로 읽히지 않도록 문자열로 쓴다 (agent 도 JSON 문자열로 넘김)
+cat > "$WORK/cluster-values.yaml" <<'EOF'
+{"global": {"awsAccountId": "000000000000"}}
+EOF
 for dir in "${APPS[@]}"; do
   enabled "$dir" || continue
   app="$(basename "$dir")"
   values=()
   [[ -f "$dir/values.yaml" ]] && values=(-f "$dir/values.yaml")
+  [[ "$(field "$dir" '.clusterValues')" == "true" ]] && values+=(-f "$WORK/cluster-values.yaml")
   case "$(field "$dir" '.type')" in
     helm)
       chart="$(field "$dir" '.chart')"

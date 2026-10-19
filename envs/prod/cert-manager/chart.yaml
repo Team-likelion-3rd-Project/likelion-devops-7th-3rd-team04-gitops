@@ -1,0 +1,10 @@
+# cert-manager — pod-identity-webhook 의 webhook TLS 인증서를 발급 · 갱신하고 caBundle 을 주입한다 (cainjector).
+# 차트를 올릴 때는 cert-manager 릴리스 노트의 upgrade 항목을 확인한다
+type: helm
+repo: https://charts.jetstack.io
+chart: cert-manager
+version: "v1.21.2"
+namespace: cert-manager
+release: cert-manager
+# pod-identity-webhook 차트의 Issuer · Certificate CRD 를 먼저 설치한다
+order: 15

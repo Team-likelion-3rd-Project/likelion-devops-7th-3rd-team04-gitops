@@ -1,0 +1,5 @@
+# External Secrets Operator chart values (prod)
+# CRD 는 차트로 설치한다 (installCRDs 기본 true). ServiceAccount 이름 external-secrets 는
+# pod-identity-webhook 매핑 · Terraform 70 irsa.tf 신뢰 정책 sub 와 같아야 한다
+serviceAccount:
+  name: external-secrets

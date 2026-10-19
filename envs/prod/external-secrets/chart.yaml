@@ -1,0 +1,10 @@
+# External Secrets Operator — AWS Secrets Manager 값을 Kubernetes Secret 으로 동기화한다.
+# AWS 권한은 IRSA(pod-identity-webhook 매핑 external-secrets/external-secrets → team04-hotel-external-secrets)
+type: helm
+repo: https://charts.external-secrets.io
+chart: external-secrets
+version: "2.13.0"
+namespace: external-secrets
+release: external-secrets
+# IRSA 를 주입받으므로 pod-identity-webhook 다음
+order: 30
