@@ -1,0 +1,2 @@
+image: "traefik/whoami:v1.12.0"
+replicas: 1

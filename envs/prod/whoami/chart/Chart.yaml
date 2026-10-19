@@ -1,0 +1,5 @@
+apiVersion: v2
+name: whoami
+description: 수직 경로 검증용 테스트 백엔드 (traefik/whoami, /whoami 만 노출)
+type: application
+version: 0.1.0

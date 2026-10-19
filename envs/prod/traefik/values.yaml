@@ -1,0 +1,45 @@
+# Traefik chart values (prod). 온프레미스는 infra/ansible roles/traefik 템플릿을 쓴다
+#
+# 워커는 ASG 라 교체 · 확장된다. 어느 워커 NodePort 로 들어와도 응답하도록 워커에 2개 띄우고
+# externalTrafficPolicy Cluster 를 쓴다 (앞단 ALB 가 출발지라 Local 로 클라이언트 IP 를 보존할 이유가 없다)
+deployment:
+  replicas: 2
+
+ingressClass:
+  enabled: true
+  isDefaultClass: false
+  name: traefik
+
+providers:
+  kubernetesIngress:
+    enabled: true
+  kubernetesCRD:
+    enabled: true
+
+ports:
+  web:
+    # 80-main-edge ALB Target Group · 30-security M2 규칙과 같은 포트
+    nodePort: 30080
+    # ALB 가 붙인 X-Forwarded-For(클라이언트 IP)를 유지한다. Traefik 이 보는 출발지는 Cluster 정책 SNAT 로
+    # 워커 IP(Main VPC CIDR) 또는 다른 워커의 vxlan.calico IP(Pod CIDR) 다
+    forwardedHeaders:
+      trustedIPs: ["10.10.0.0/16", "10.0.0.0/16"]
+  websecure:
+    # TLS 는 ALB 에서 종료한다
+    expose:
+      default: false
+
+# 80-main-edge ALB Target Group 헬스체크용. Traefik 자체 /ping 을 web 엔트리포인트(NodePort)에 노출
+ingressRoute:
+  healthcheck:
+    enabled: true
+    entryPoints: ["web"]
+
+service:
+  spec:
+    type: NodePort
+    externalTrafficPolicy: Cluster
+
+# 클라이언트 IP / 라우팅 확인용
+accessLog:
+  enabled: true
