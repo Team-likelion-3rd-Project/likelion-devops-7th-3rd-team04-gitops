@@ -10,10 +10,14 @@ envs/prod/              # 원본: 모노레포 infra/gitops/prod (1:1)
 ├── traefik/            # Ingress Controller (워커 NodePort 30080)
 │   ├── chart.yaml      # 앱 정의 — 차트 종류 · 위치 · 버전, namespace, release, order
 │   └── values.yaml
+├── cert-manager/       # pod-identity-webhook TLS 인증서
+├── pod-identity-webhook/  # IRSA 주입 (ns/SA → Role 매핑, clusterValues)
 ├── whoami/             # 수직 경로 검증용 테스트 백엔드 (/whoami)
 │   ├── chart.yaml
 │   ├── values.yaml
 │   └── chart/          # type: local 차트
+├── external-secrets/   # External Secrets Operator
+├── cluster-secret-store/  # ClusterSecretStore aws-secrets-manager (type: local)
 ├── backend/
 │   ├── chart.yaml      # 모노레포 차트 위치 + 고정 커밋 SHA (브랜치 금지), 지금은 enabled: false
 │   └── values.yaml     # backend Helm values (이미지 태그, ECR, Ingress, replicas ...)
@@ -68,7 +72,8 @@ scripts/validate.sh    # PR 검증 (로컬에서도 실행)
 
 **도입 전 (지금) — 배포 agent**
 - 운영 Main 클러스터의 CronJob `gitops-sync`(1분)가 `main` 의 SHA 가 바뀌면 `envs/prod/*/chart.yaml` 을 `order` 순으로 `helm upgrade --install --atomic` 합니다. 설치 · 동작 · 운영 방법은 모노레포 [`infra/gitops/prod/README.md`](https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team04/blob/develop/infra/gitops/prod/README.md).
-- 앱 정의 `chart.yaml`: `type`(`helm` · `git` · `local`), `repo` · `chart` · `version`(helm), `repo` · `path` · `revision`(git), `path`(local), `namespace`, `release`, `order`, `enabled`. `validate` 가 같은 형식으로 앱마다 렌더링합니다.
+- 앱 정의 `chart.yaml`: `type`(`helm` · `git` · `local`), `repo` · `chart` · `version`(helm), `repo` · `path` · `revision`(git), `path`(local), `namespace`, `release`, `order`, `enabled`, `clusterValues`. `validate` 가 같은 형식으로 앱마다 렌더링합니다.
+- **계정 ID 는 이 레포에 쓰지 않습니다.** `clusterValues: true` 인 앱은 agent 가 클러스터 값(`global.awsAccountId`)을 더 넘기므로 values 에서 `{{ .Values.global.awsAccountId }}` 로 씁니다 (차트가 템플릿을 지원하는 곳, 예: pod-identity-webhook 의 `RoleARN`). `validate` 는 더미 값으로 렌더링합니다.
 - 실패한 SHA(렌더링 오류 · readiness 실패)는 `--atomic` 으로 이전 릴리스를 유지하고 다시 시도하지 않습니다 → **수정 PR 을 merge** 합니다. 차트 다운로드 같은 네트워크 실패는 매 분 재시도합니다.
 - 배포 agent 는 이 레포 하나만 읽습니다(public, 자격 증명 없음). 그래서 main 보호 규칙이 곧 운영 배포 승인입니다.
 - 결제 서버는 `envs/prod/payment/values.yaml` 의 태그로 결제 VPC 의 서버를 갱신합니다 (merge 후 GitHub Actions → SSM Parameter Store → 결제 서버 pull agent).

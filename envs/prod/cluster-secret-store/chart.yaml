@@ -1,0 +1,7 @@
+# ClusterSecretStore aws-secrets-manager — 앱의 ExternalSecret 이 참조하는 Secrets Manager 연결
+type: local
+path: chart   # 이 폴더 기준
+namespace: external-secrets
+release: cluster-secret-store
+# external-secrets 의 CRD · webhook 다음
+order: 40

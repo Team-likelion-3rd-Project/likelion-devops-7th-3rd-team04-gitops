@@ -1,0 +1,4 @@
+# cert-manager chart values (prod)
+# CRD 를 차트로 설치한다 (helm uninstall 해도 CRD 는 남는다: crds.keep 기본 true)
+crds:
+  enabled: true
