@@ -8,8 +8,8 @@
 type: git
 repo: https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team04.git
 path: backend-deploy/charts/backend
-# TODO: 첫 릴리스(rc.1) 의 모노레포 main 커밋 SHA. 그 전까지는 차트 0.4.0 이 들어간 커밋 (서비스별 SA · tpl · Flyway TLS)
-revision: "4327bbebc9d2f51ef330812c333123c07a7190dd"
+# TODO: 첫 릴리스(rc.1) 의 모노레포 main 커밋 SHA. 그 전까지는 차트 0.4.0 이 들어간 develop 커밋 (#186, 서비스별 SA · tpl · Flyway TLS)
+revision: "fdfeb47561c884928a9b161c9f7a3dea5de8cd2f"
 namespace: backend
 release: backend
 # ECR 주소 · SQS 큐 URL 의 계정 ID(global.awsAccountId) 를 클러스터 값으로 받는다 (README "클러스터 값")
