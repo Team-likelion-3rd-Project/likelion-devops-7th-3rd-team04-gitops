@@ -1,0 +1,27 @@
+# backend 차트의 global.secretName 과 같아야 한다
+secretName: backend-secrets
+# cluster-secret-store 앱의 이름
+clusterSecretStore: aws-secrets-manager
+# Secrets Manager 값을 다시 읽는 주기. 클러스터와 Secret 은 같은 날 같이 재생성되므로 길게 둔다.
+# 41-main-data 만 다시 만들었으면 ExternalSecret 에 force-sync annotation 을 달거나 이 주기를 기다린다
+refreshInterval: 1h
+
+# Secret key ← Secrets Manager <Secret 이름>.<JSON 속성>. Secret 은 Terraform 41-main-data 가 고정 이름으로 만든다.
+# 서비스가 새 secretEnv 를 쓰면 여기와 41-main-data 에 같이 추가한다 (backend 차트 values 의 services.*.secretEnv)
+data:
+  team04-hotel/prod/main-db:
+    DB_HOST: host
+    DB_DATABASE: dbname
+    DB_USERNAME: username
+    DB_PASSWORD: password
+  team04-hotel/prod/main-valkey:
+    REDIS_HOST: host
+    REDIS_PASSWORD: password
+  team04-hotel/prod/backend-app:
+    JWT_ACCESS_SECRET: jwt_access_secret
+    JWT_REFRESH_SECRET: jwt_refresh_secret
+    MOCK_PG_SECRET: mock_pg_secret
+
+# Flyway(backend migrations.main.db.caConfigMap) 가 RDS 서버 인증서를 검증하는 CA 묶음.
+# 공개 인증서다: https://truststore.pki.rds.amazonaws.com/us-east-1/us-east-1-bundle.pem (Root CA RSA2048 · RSA4096 · ECC384 G1)
+rdsCaConfigMap: rds-ca-bundle
