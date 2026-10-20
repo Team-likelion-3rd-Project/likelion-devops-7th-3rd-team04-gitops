@@ -1,0 +1,8 @@
+# backend 가 읽는 Secret(backend-secrets) 과 RDS CA 인증서 ConfigMap.
+# backend 차트의 Flyway hook Job 은 일반 리소스보다 먼저 실행되므로, Secret 을 backend 릴리스 밖에서 먼저 만든다
+type: local
+path: chart   # 이 폴더 기준
+namespace: backend
+release: backend-secrets
+# cluster-secret-store 다음, backend 보다 먼저
+order: 45

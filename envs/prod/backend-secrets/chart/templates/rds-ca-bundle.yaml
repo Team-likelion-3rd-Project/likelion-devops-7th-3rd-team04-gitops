@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.rdsCaConfigMap }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  us-east-1-bundle.pem: |-
+    {{- .Files.Get "files/us-east-1-bundle.pem" | trim | nindent 4 }}

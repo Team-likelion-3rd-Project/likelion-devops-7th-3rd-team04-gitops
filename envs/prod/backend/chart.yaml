@@ -4,14 +4,15 @@
 # 브랜치를 가리키면 모노레포의 차트 변경이 이 레포의 PR 없이 prod 에 반영됩니다.
 # 차트를 바꾸려면: 모노레포 main 에 차트 변경 merge → 그 커밋 SHA 로 이 값을 바꾸는 PR.
 #
-# ArgoCD 도입 후에는 Application 의 첫 번째 source(targetRevision) 로 옮깁니다 (README "ArgoCD 도입 시").
+# ArgoCD 도입 후에는 Application 의 첫 번째 source(targetRevision) 로 옮깁니다 (README "ArgoCD 전환").
 type: git
 repo: https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team04.git
 path: backend-deploy/charts/backend
-revision: "0000000000000000000000000000000000000000"   # TODO: prod 에 처음 배포할 모노레포 main 커밋 SHA
+# TODO: 첫 릴리스(rc.1) 의 모노레포 main 커밋 SHA. 그 전까지는 차트 0.4.0 이 들어간 커밋 (서비스별 SA · tpl · Flyway TLS)
+revision: "4327bbebc9d2f51ef330812c333123c07a7190dd"
 namespace: backend
 release: backend
-# Traefik(IngressClass) 다음
-order: 30
-# prod 값(ECR · Ingress · Secret)이 준비되기 전까지 agent 배포 · validate 대상에서 뺀다 (LDP-79 에서 true)
-enabled: false
+# ECR 주소 · SQS 큐 URL 의 계정 ID(global.awsAccountId) 를 클러스터 값으로 받는다 (README "클러스터 값")
+clusterValues: true
+# backend-secrets(Secret · RDS CA) 다음
+order: 50

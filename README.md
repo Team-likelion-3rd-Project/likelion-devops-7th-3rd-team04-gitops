@@ -18,8 +18,9 @@ envs/prod/              # 원본: 모노레포 infra/gitops/prod (1:1)
 │   └── chart/          # type: local 차트
 ├── external-secrets/   # External Secrets Operator
 ├── cluster-secret-store/  # ClusterSecretStore aws-secrets-manager (type: local)
+├── backend-secrets/    # backend Secret(ExternalSecret) · RDS CA ConfigMap (type: local)
 ├── backend/
-│   ├── chart.yaml      # 모노레포 차트 위치 + 고정 커밋 SHA (브랜치 금지), 지금은 enabled: false
+│   ├── chart.yaml      # 모노레포 차트 위치 + 고정 커밋 SHA (브랜치 금지), clusterValues
 │   └── values.yaml     # backend Helm values (이미지 태그, ECR, Ingress, replicas ...)
 └── payment/
     └── values.yaml     # 결제 서버(결제 VPC, 클러스터 밖) 이미지 태그 · 비밀 아닌 설정 — 앱 정의 아님
@@ -91,7 +92,7 @@ scripts/validate.sh    # PR 검증 (로컬에서도 실행)
 
 ## 알려진 제약 / TODO
 
-- `envs/prod/**` 의 `TODO` (계정 ID · 도메인 · PrivateLink 엔드포인트 · 큐 URL · 첫 배포 SHA)는 prod 인프라 구축 후 채웁니다. 그 전까지 backend 는 `enabled: false` 라 배포 agent · `validate` 렌더링 대상이 아닙니다 (`revision` 이 0 으로 채워져 있음, LDP-79 에서 `true`).
-- ECR 리포지토리(Terraform 11-registry)에 `main-migrations` · `payment-migrations` 가 아직 없습니다.
-- Terraform 11-registry 의 SSM Parameter Store `image-tag/*` 는 "CI 가 갱신"하는 설계입니다 — 이 레포가 태그의 원본이 되므로, SSM 은 이 레포 merge 결과를 따라가도록(결제 서버용) 바꾸거나 정리합니다.
+- `envs/prod/backend` 의 `TODO` (도메인 · CORS · PrivateLink 결제 엔드포인트)는 도메인 구매 · 결제 단계에서 채웁니다. 계정 ID · 큐 URL 은 클러스터 값(`global.awsAccountId`)으로 조립합니다.
+- 구축 기간(v1.0.0 전)에는 `backend` 의 `revision` · `imageTag` 를 수동 PR 로 넣습니다. 모노레포 PR 이 squash merge 되면 작업 브랜치 커밋은 사라질 수 있으므로 `revision` 은 merge 된 커밋 SHA 로 둡니다.
+- Terraform 11-registry 의 SSM Parameter Store `image-tag/*` 는 결제 서버용입니다. 이 레포 merge 후 GitHub Actions 가 갱신합니다 (구현 예정).
 - payment-service 는 아직 booking-service 를 gRPC 로 직접 호출합니다. prod 는 결제 → 메인 경로가 없으므로(PrivateLink 는 메인 → 결제만) 백엔드 변경 전까지 `BOOKING_SERVICE_HOST` 는 미정입니다.

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: backend-secrets
+description: backend Secret (ExternalSecret, AWS Secrets Manager) 과 RDS CA 인증서 ConfigMap
+type: application
+version: 0.1.0
