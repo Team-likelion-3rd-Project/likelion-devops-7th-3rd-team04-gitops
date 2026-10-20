@@ -25,7 +25,7 @@ envs/prod/              # 원본: 모노레포 infra/gitops/prod (1:1)
 └── payment/
     └── values.yaml     # 결제 서버(결제 VPC, 클러스터 밖) 이미지 태그 · 비밀 아닌 설정 — 앱 정의 아님
 scripts/validate.sh    # PR 검증 (로컬에서도 실행)
-.github/               # CODEOWNERS, PR 템플릿, validate workflow
+.github/               # CODEOWNERS, PR 템플릿, workflow (validate · sync-payment-tag)
 ```
 
 ## 규칙
@@ -33,20 +33,26 @@ scripts/validate.sh    # PR 검증 (로컬에서도 실행)
 1. **main 에 직접 push 하지 않습니다.** 보호 규칙(ruleset)이 막습니다 — 관리자도 예외 없음.
 2. **비밀값은 넣지 않습니다.** public 레포이고, 한 번 커밋되면 이력에서 지울 수 없습니다. 비밀은 AWS Secrets Manager 에 두고 클러스터(External Secrets) · 결제 서버가 직접 읽습니다. PR 의 gitleaks 검사가 1차로 막습니다.
 3. **차트는 커밋 SHA 로 고정합니다** (`envs/prod/backend/chart.yaml`). 차트 변경도 PR 로 올라옵니다.
-4. **이미지 태그는 커밋 SHA** 입니다 (`latest` · 브랜치 이름 금지, ECR 도 IMMUTABLE).
+4. **이미지 태그는 커밋 SHA** 입니다 (`latest` · 브랜치 이름 금지, ECR 도 IMMUTABLE). 릴리스 태그는 모노레포 **main 커밋 SHA 40자**이고 backend `chart.yaml` 의 `revision` 과 같은 값입니다.
+   `validate` 가 태그 · revision 이 모노레포 main 이력에 있는지 확인합니다 (구축 기간에는 `validate.yml` 의 `REQUIRE_MAIN_HISTORY: "false"` 로 경고만 — 첫 릴리스 merge 후 `"true"`).
 5. 결제 쪽 계약(payment.proto · SQS 메시지 · 결제 마이그레이션)이 바뀌면 **결제 서버 PR 을 먼저** merge · 반영합니다.
 
 ## 변경 흐름
 
 ```
-모노레포 main merge ─▶ GitLab 미러 ─▶ GitLab main 파이프라인: 빌드 → ECR push
-                                     └▶ 이 레포에 PR 자동 생성 "chore(prod): backend/payment → <sha>"
-리뷰(CODEOWNERS) · validate 통과 ─▶ merge ─▶ 배포 (지금: 클러스터의 배포 agent 가 1분 안에 main 을 읽음 / 이후: ArgoCD sync)
+모노레포 릴리스 PR merge (develop · hotfix → main) ─▶ GitLab 미러 ─▶ GitLab main 파이프라인 (AWS Runner)
+    ├▶ 이미지 10개 빌드 → ECR push (태그 = main 커밋 SHA)
+    └▶ 이 레포에 PR 자동 생성 "chore(prod): backend · payment → <sha 8자>" (GitHub App, 브랜치 release/<sha>)
+리뷰(CODEOWNERS) · validate 통과 ─▶ merge ─▶ 배포
+    ├▶ 메인 클러스터: 배포 agent 가 1분 안에 main 을 읽어 적용 (이후: ArgoCD sync)
+    └▶ 결제 서버: sync-payment-tag workflow 가 태그를 Parameter Store 에 기록 → 결제 서버 pull agent
 롤백 ─▶ 해당 PR 을 revert 하는 PR
 ```
 
 - 자동 PR 은 **만들기까지만** 합니다. merge 는 사람이 합니다.
-- GitLab 이 쓰는 토큰은 **이 레포에만** Contents · Pull requests 쓰기 권한이 있는 fine-grained PAT(또는 GitHub App)입니다. GitLab CI 변수(masked, protected)로 둡니다.
+- PR 은 GitHub App `team04-hotel-release-bot` 이 만듭니다. **이 레포에만 설치**되어 Contents · Pull requests 쓰기만 있고, main 은 ruleset(bypass 없음, 승인 1)이라 App 이 merge 할 수 없습니다. 개인 키는 AWS Secrets Manager 에 있고 GitLab 의 AWS Runner 만 읽습니다 (PAT · CI 변수 없음).
+- 결제 서버 태그 동기화는 GitHub OIDC 로 AWS Role 을 받습니다. Role 은 이 레포 **main** 실행만 신뢰하고 파라미터 하나만 쓸 수 있습니다. Role ARN 은 Secret `AWS_SSM_SYNC_ROLE_ARN` (public 레포라 Actions 로그가 공개 — 계정 ID 가 찍히지 않게).
+- 릴리스 절차(runbook)와 실패 대응은 모노레포 [`infra/gitops/prod/README.md`](https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team04/blob/develop/infra/gitops/prod/README.md) "릴리스".
 - 설정값(replicas, 리소스, 도메인 등)은 모노레포 `infra/gitops/prod` 를 먼저 고칩니다. v1.0.0(2026-10-27) 전까지는 같은 내용으로 이 레포에 PR 을 직접 열고, 이후에는 모노레포 릴리스 PR 의 자동 PR 과 비상 경로만 씁니다.
 
 ## 레포 설정 (관리자 1회)
@@ -65,6 +71,10 @@ scripts/validate.sh    # PR 검증 (로컬에서도 실행)
 - 리뷰 규칙: 팀원 4명 전원이 CODEOWNERS(`*`)라 누구나 리뷰할 수 있고, **PR 작성자를 제외한 1명의 승인**이 있어야 merge 됩니다 (GitHub 는 작성자 본인 승인을 세지 않음).
 - PR 을 열면 4명 모두 리뷰어로 자동 지정됩니다.
 
+**Settings → Secrets and variables → Actions → Secrets**: `AWS_SSM_SYNC_ROLE_ARN` = `arn:aws:iam::<계정 ID>:role/team04-hotel-gitops-ssm-sync` (모노레포 Terraform 10-global)
+
+**Settings → GitHub Apps (조직)**: `team04-hotel-release-bot` 이 이 레포에만 설치되어 있는지 확인
+
 **Settings → Collaborators and teams**: 팀원 4명(`rbsxo135`, `wkdtpgns5016`, `kimjhn4188-ctrl`, `jack7051105`) 모두 **Write 이상** — CODEOWNERS 는 쓰기 권한이 있는 사람만 소유자로 인정됩니다. 관리자(Admin)는 최소 인원
 
 ## ArgoCD 도입 전 / 후
@@ -77,7 +87,7 @@ scripts/validate.sh    # PR 검증 (로컬에서도 실행)
 - **계정 ID 는 이 레포에 쓰지 않습니다.** `clusterValues: true` 인 앱은 agent 가 클러스터 값(`global.awsAccountId`)을 더 넘기므로 values 에서 `{{ .Values.global.awsAccountId }}` 로 씁니다 (차트가 템플릿을 지원하는 곳, 예: pod-identity-webhook 의 `RoleARN`). `validate` 는 더미 값으로 렌더링합니다.
 - 실패한 SHA(렌더링 오류 · readiness 실패)는 `--atomic` 으로 이전 릴리스를 유지하고 다시 시도하지 않습니다 → **수정 PR 을 merge** 합니다. 차트 다운로드 같은 네트워크 실패는 매 분 재시도합니다.
 - 배포 agent 는 이 레포 하나만 읽습니다(public, 자격 증명 없음). 그래서 main 보호 규칙이 곧 운영 배포 승인입니다.
-- 결제 서버는 `envs/prod/payment/values.yaml` 의 태그로 결제 VPC 의 서버를 갱신합니다 (merge 후 GitHub Actions → SSM Parameter Store → 결제 서버 pull agent).
+- 결제 서버는 `envs/prod/payment/values.yaml` 의 태그로 결제 VPC 의 서버를 갱신합니다 (merge 후 `sync-payment-tag` workflow → SSM Parameter Store → 결제 서버 pull agent).
 
 **도입 시 바꿀 것**
 1. `argocd/root.yaml`(app-of-apps)과 앱 폴더마다 Application 추가 (`chart.yaml` 하나 = Application 하나, `order` → sync-wave). backend 는 multi-source:
@@ -93,6 +103,6 @@ scripts/validate.sh    # PR 검증 (로컬에서도 실행)
 ## 알려진 제약 / TODO
 
 - `envs/prod/backend` 의 `TODO` (도메인 · CORS · PrivateLink 결제 엔드포인트)는 도메인 구매 · 결제 단계에서 채웁니다. 계정 ID · 큐 URL 은 클러스터 값(`global.awsAccountId`)으로 조립합니다.
-- 구축 기간(v1.0.0 전)에는 `backend` 의 `revision` · `imageTag` 를 수동 PR 로 넣습니다. 모노레포 PR 이 squash merge 되면 작업 브랜치 커밋은 사라질 수 있으므로 `revision` 은 merge 된 커밋 SHA 로 둡니다.
-- Terraform 11-registry 의 SSM Parameter Store `image-tag/*` 는 결제 서버용입니다. 이 레포 merge 후 GitHub Actions 가 갱신합니다 (구현 예정).
+- 구축 기간(v1.0.0 전)에는 `backend` 의 `revision` · `imageTag` 를 수동 PR 로 넣었습니다 (develop · 작업 브랜치 커밋이라 `validate` 가 경고). 첫 릴리스(rc.1) PR 이 merge 되면 `validate.yml` 의 `REQUIRE_MAIN_HISTORY` 를 `"true"` 로 바꿉니다.
+- `payment` 의 `image.registry` · `env` 의 `<account-id>` 와 결제 → booking 경로는 결제 단계에서 정리합니다.
 - payment-service 는 아직 booking-service 를 gRPC 로 직접 호출합니다. prod 는 결제 → 메인 경로가 없으므로(PrivateLink 는 메인 → 결제만) 백엔드 변경 전까지 `BOOKING_SERVICE_HOST` 는 미정입니다.

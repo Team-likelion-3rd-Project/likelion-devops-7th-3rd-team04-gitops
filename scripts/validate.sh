@@ -2,6 +2,8 @@
 # PR 검증 (GitHub Actions validate.yml 이 실행 — 로컬에서도 같은 명령으로 실행 가능)
 #   1) 앱 정의(envs/prod/*/chart.yaml) 형식 — type 별 필수 값, git 차트는 커밋 SHA 고정
 #   2) 이미지 태그가 커밋 SHA 형식인지 (latest · 브랜치 이름 금지)
+#   2-1) 이미지 태그 · backend chart revision 이 모노레포 main 이력의 커밋인지 (리뷰를 거쳐 main 에 들어간 코드만 배포)
+#        REQUIRE_MAIN_HISTORY=false(구축 기간, 첫 릴리스 전)면 main 밖 SHA 는 경고만. 로컬 기본값은 true
 #   3) 앱마다 배포 agent 와 같은 차트 · values 로 렌더링 (helm template)
 #   4) 렌더링 결과 Kubernetes 스키마 검증 (kubeconform)
 # enabled: false 인 앱은 1) 의 형식만 보고 2) – 4) 에서 뺀다.
@@ -69,6 +71,50 @@ for pair in "backend/values.yaml:.global.imageTag" "payment/values.yaml:.image.i
   [[ "$tag" =~ ^[0-9a-f]{7,40}$ ]] || fail "$file $expr 는 커밋 SHA 여야 합니다 (latest · 브랜치 이름 금지): $tag"
   echo "OK $file → $tag"
 done
+
+echo "== 2-1) 모노레포 main 이력"
+# validate.yml 의 env. 첫 릴리스(rc.1) gitops PR 이 merge 된 뒤 true 로 바꾼다 (그 전 값은 develop 커밋)
+REQUIRE_MAIN_HISTORY="${REQUIRE_MAIN_HISTORY:-true}"
+backend_def="$ENV_DIR/backend/chart.yaml"
+if [[ -f "$backend_def" ]] && enabled "$ENV_DIR/backend"; then
+  mono="$WORK/monorepo"
+  git init -q "$mono"
+  # 커밋 이력만 받는다 (파일 내용 없음)
+  git -C "$mono" fetch -q --filter=blob:none --no-tags "$(field "$ENV_DIR/backend" '.repo')" \
+    +refs/heads/main:refs/remotes/origin/main +refs/heads/develop:refs/remotes/origin/develop ||
+    fail "모노레포 main · develop 이력을 가져오지 못했습니다"
+  checks=(
+    "backend/chart.yaml .revision"
+    "backend/values.yaml .global.imageTag"
+    "payment/values.yaml .image.imageTag"
+  )
+  for c in "${checks[@]}"; do
+    file="${c% *}"
+    expr="${c#* }"
+    sha="$(yq "$expr" "$ENV_DIR/$file")"
+    # 결제 서버 첫 릴리스 전 자리표시(0) — 구축 기간에만 허용
+    if [[ "$sha" =~ ^0+$ ]]; then
+      [[ "$REQUIRE_MAIN_HISTORY" == "true" ]] && fail "$file $expr 가 자리표시($sha)입니다 — 릴리스 SHA 가 필요합니다"
+      echo "경고 $file $expr → 자리표시 $sha (구축 기간 예외)"
+      continue
+    fi
+    if full="$(git -C "$mono" rev-parse -q --verify "$sha^{commit}" 2>/dev/null)" &&
+      git -C "$mono" merge-base --is-ancestor "$full" origin/main; then
+      echo "OK $file $expr → ${full:0:8} (main)"
+      continue
+    fi
+    if [[ -n "$full" ]] && git -C "$mono" merge-base --is-ancestor "$full" origin/develop; then
+      where="develop 커밋"
+    else
+      where="main · develop 어디에도 없는 커밋 (squash 된 작업 브랜치 등)"
+    fi
+    [[ "$REQUIRE_MAIN_HISTORY" == "true" ]] &&
+      fail "$file $expr 의 $sha 는 모노레포 main 이력에 없습니다 — $where (릴리스 PR 로 main 에 들어간 커밋만 배포)"
+    echo "경고 $file $expr → $sha 는 $where 입니다 (구축 기간 예외, REQUIRE_MAIN_HISTORY=false)"
+  done
+else
+  echo "건너뜀 (backend enabled: false)"
+fi
 
 echo "== 3) helm template"
 mkdir -p "$WORK/rendered"
