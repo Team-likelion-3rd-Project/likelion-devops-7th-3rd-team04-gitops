@@ -12,15 +12,13 @@ global:
   imageRegistry: "{{ .Values.global.awsAccountId }}.dkr.ecr.us-east-1.amazonaws.com"
   imageRepositoryPrefix: team04-hotel/
   # 커밋 SHA (latest 금지 — 차트가 렌더링을 거부, ECR 도 IMMUTABLE)
-  imageTag: "4327bbe"   # 구축 기간 수동 push (rc.1 부터 GitLab 이 PR 로 갱신)
+  imageTag: "36607deaec7ee9081d23b568c918bf103489bc1b" # 릴리스 main 커밋 SHA (GitLab release:gitops-pr)
   # 워커 kubelet 이 노드 Role 로 ECR pull (ecr-credential-provider, Ansible aws_ecr_credential_provider) → imagePullSecret 불필요
   imagePullSecrets: []
   secretName: backend-secrets
-
 # 서비스별 SA — IRSA 매핑(pod-identity-webhook values)이 backend/<서비스 이름> 기준
 serviceAccounts:
   create: true
-
 # api-gateway 외부 노출: ALB(Terraform 80-main-edge) → 워커 NodePort 30080 → Traefik → api-gateway
 ingress:
   enabled: true
@@ -29,12 +27,11 @@ ingress:
   host: ""
   paths:
     - /api
-
 services:
   api-gateway:
     replicas: 2
     env:
-      CORS_ORIGIN: "https://www.example.com"   # TODO: 프론트 도메인 (81-frontend, 도메인 구매 후)
+      CORS_ORIGIN: "https://www.example.com" # TODO: 프론트 도메인 (81-frontend, 도메인 구매 후)
       # 결제 서버는 결제 VPC — 메인 VPC 의 PrivateLink 엔드포인트 Route 53 고정 이름으로 호출 (2-3, 60-payment-app)
       # TODO(2-3): PAYMENT_SERVICE_HOST
   booking-service:
@@ -61,14 +58,13 @@ services:
   # prod 는 실제 PG(토스)를 결제 서버가 직접 호출 → 목업 불필요
   pg-mock-service:
     enabled: false
-
 migrations:
   # 메인 DB(RDS, 41-main-data) — 배포 직전 hook 으로 Flyway 적용. RDS 서버 인증서를 검증하는 TLS 로 접속
   main:
     enabled: true
     db:
       jdbcParams: "sslMode=verify-full&serverSslCert=/flyway/certs/us-east-1-bundle.pem"
-      caConfigMap: rds-ca-bundle   # backend-secrets 앱
+      caConfigMap: rds-ca-bundle # backend-secrets 앱
   # 결제 DB 는 결제 서버 쪽에서 적용 (클러스터에서 결제 DB 에 접근하지 않음)
   payment:
     enabled: false
