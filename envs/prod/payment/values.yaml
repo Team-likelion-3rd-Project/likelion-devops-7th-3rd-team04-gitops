@@ -7,20 +7,19 @@
 # 결제 쪽 계약(payment.proto, SQS 메시지, 결제 마이그레이션)이 바뀌는 배포는 이 파일을 먼저 merge·반영한 뒤 backend 를 올립니다.
 
 image:
-  registry: "<account-id>.dkr.ecr.us-east-1.amazonaws.com"   # TODO: prod 계정 ID
-  imageTag: "00000000"   # TODO: 첫 배포 이미지 태그
+  registry: "<account-id>.dkr.ecr.us-east-1.amazonaws.com" # TODO: prod 계정 ID
+  imageTag: "2c30ddc062a0973009e217ad3c57296134cc990f" # 릴리스 main 커밋 SHA (GitLab release:gitops-pr)
   # 같은 태그로 아래 두 이미지를 씀
   repositories:
     app: team04-hotel/payment-service
-    migrations: team04-hotel/payment-migrations   # TODO: Terraform 11-registry 에 리포지토리 추가 필요
-
+    migrations: team04-hotel/payment-migrations # TODO: Terraform 11-registry 에 리포지토리 추가 필요
 # 비밀이 아닌 설정만 (비밀값은 Secrets Manager 에서 결제 서버가 직접 읽음)
 env:
   NODE_ENV: production
   PAYMENT_PROVIDER: TOSS
-  SQS_ENDPOINT: ""          # 비움 = AWS 기본 주소 (자격증명은 인스턴스 IAM 역할)
+  SQS_ENDPOINT: "" # 비움 = AWS 기본 주소 (자격증명은 인스턴스 IAM 역할)
   SQS_REGION: us-east-1
-  PAYMENT_RESULT_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/<account-id>/payment-result.fifo"   # TODO
+  PAYMENT_RESULT_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/<account-id>/payment-result.fifo" # TODO
   # 메인 클러스터의 booking-service gRPC — prod 에는 결제 → 메인 방향 경로가 없음 (PrivateLink 는 메인 → 결제만).
   # 백엔드가 결제 → booking 호출을 없애기 전까지는 미정 (README "알려진 제약")
   BOOKING_SERVICE_HOST: ""
