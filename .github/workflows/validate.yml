@@ -27,9 +27,9 @@ jobs:
       - name: values 검증
         run: bash scripts/validate.sh
         env:
-          # 이미지 태그 · chart revision 이 모노레포 main 이력에 있어야 함.
-          # 구축 기간(첫 릴리스 전)에는 develop 커밋도 경고로 허용 — 첫 릴리스(rc.1) PR merge 후 "true" 로 바꾸는 PR 을 올린다
-          REQUIRE_MAIN_HISTORY: "false"
+          # 이미지 태그 · chart revision 이 모노레포 main 이력에 있어야 함 (릴리스 PR 로 main 에 들어간 커밋만 배포).
+          # 첫 릴리스 v1.0.0-rc.1 부터 강제. "false" 는 구축 기간에만 쓰던 경고 모드
+          REQUIRE_MAIN_HISTORY: "true"
 
       # public 레포 — 비밀값이 커밋되면 PR 단계에서 막음 (이력에 남으면 지울 수 없음)
       - name: 비밀값 스캔 (gitleaks)

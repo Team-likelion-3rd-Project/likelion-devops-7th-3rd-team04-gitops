@@ -34,7 +34,7 @@ scripts/validate.sh    # PR 검증 (로컬에서도 실행)
 2. **비밀값은 넣지 않습니다.** public 레포이고, 한 번 커밋되면 이력에서 지울 수 없습니다. 비밀은 AWS Secrets Manager 에 두고 클러스터(External Secrets) · 결제 서버가 직접 읽습니다. PR 의 gitleaks 검사가 1차로 막습니다.
 3. **차트는 커밋 SHA 로 고정합니다** (`envs/prod/backend/chart.yaml`). 차트 변경도 PR 로 올라옵니다.
 4. **이미지 태그는 커밋 SHA** 입니다 (`latest` · 브랜치 이름 금지, ECR 도 IMMUTABLE). 릴리스 태그는 모노레포 **main 커밋 SHA 40자**이고 backend `chart.yaml` 의 `revision` 과 같은 값입니다.
-   `validate` 가 태그 · revision 이 모노레포 main 이력에 있는지 확인합니다 (구축 기간에는 `validate.yml` 의 `REQUIRE_MAIN_HISTORY: "false"` 로 경고만 — 첫 릴리스 merge 후 `"true"`).
+   `validate` 가 태그 · revision 이 모노레포 main 이력에 있는지 확인하고, 없으면 거부합니다 (`validate.yml` 의 `REQUIRE_MAIN_HISTORY: "true"`, 첫 릴리스 v1.0.0-rc.1 부터).
 5. 결제 쪽 계약(payment.proto · SQS 메시지 · 결제 마이그레이션)이 바뀌면 **결제 서버 PR 을 먼저** merge · 반영합니다.
 
 ## 변경 흐름
@@ -103,6 +103,6 @@ scripts/validate.sh    # PR 검증 (로컬에서도 실행)
 ## 알려진 제약 / TODO
 
 - `envs/prod/backend` 의 `TODO` (도메인 · CORS · PrivateLink 결제 엔드포인트)는 도메인 구매 · 결제 단계에서 채웁니다. 계정 ID · 큐 URL 은 클러스터 값(`global.awsAccountId`)으로 조립합니다.
-- 구축 기간(v1.0.0 전)에는 `backend` 의 `revision` · `imageTag` 를 수동 PR 로 넣었습니다 (develop · 작업 브랜치 커밋이라 `validate` 가 경고). 첫 릴리스(rc.1) PR 이 merge 되면 `validate.yml` 의 `REQUIRE_MAIN_HISTORY` 를 `"true"` 로 바꿉니다.
+- 첫 릴리스(v1.0.0-rc.1) 전에는 `backend` 의 `revision` · `imageTag` 를 수동 PR 로 넣었습니다. rc.1 부터는 릴리스 PR 만 이 값을 바꾸고, `validate` 가 모노레포 main 이력 밖의 SHA 를 거부합니다. 수동으로 값을 바꾸는 비상 PR 도 main 커밋 SHA 만 쓸 수 있습니다.
 - `payment` 의 `image.registry` · `env` 의 `<account-id>` 와 결제 → booking 경로는 결제 단계에서 정리합니다.
 - payment-service 는 아직 booking-service 를 gRPC 로 직접 호출합니다. prod 는 결제 → 메인 경로가 없으므로(PrivateLink 는 메인 → 결제만) 백엔드 변경 전까지 `BOOKING_SERVICE_HOST` 는 미정입니다.
