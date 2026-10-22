@@ -1,25 +1,25 @@
-# prod 결제 서버 (결제 VPC, EKS 밖 — Terraform 60-payment-app) 의 배포 상태.
-# 온프레미스 dev 의 결제 노드(infra/ansible payment.yml)와 같은 구성: 결제 DB 마이그레이션 → payment-service.
+# prod 결제 서버 (결제 VPC, 메인 클러스터 밖 — Terraform 60-payment-app) 의 배포 상태.
+# merge 하면 sync-payment-tag workflow 가 {image.imageTag, env} 를 Parameter Store 에 쓰고,
+# 결제 서버 pull agent 가 1분 안에 Flyway(payment-migrations) → payment-service 교체 → 헬스 확인을 합니다. 실패하면 이전 버전으로 되돌립니다.
+# pg-mock 인스턴스(부하 테스트용)도 같은 imageTag 를 씁니다.
 #
-# ⚠️ 이 레포는 public 입니다. 결제 DB 비밀번호 · TOSS_SECRET_KEY 등은 넣지 않습니다 (AWS Secrets Manager).
+# ⚠️ 이 레포는 public 입니다. 결제 DB 비밀번호 · TOSS_SECRET_KEY 등은 넣지 않습니다 (AWS Secrets Manager 에서 결제 서버가 직접 읽음).
 #
 # imageTag 는 GitLab main 파이프라인이 ECR push 후 여는 PR 로 갱신됩니다 — backend 와 같은 커밋이면 같은 값.
 # 결제 쪽 계약(payment.proto, SQS 메시지, 결제 마이그레이션)이 바뀌는 배포는 이 파일을 먼저 merge·반영한 뒤 backend 를 올립니다.
 
 image:
-  registry: "<account-id>.dkr.ecr.us-east-1.amazonaws.com" # TODO: prod 계정 ID
   imageTag: "2c30ddc062a0973009e217ad3c57296134cc990f" # 릴리스 main 커밋 SHA (GitLab release:gitops-pr)
-  # 같은 태그로 아래 두 이미지를 씀
+  # 같은 태그로 아래 이미지를 씀 (레지스트리 · 저장소는 Terraform 이 정함 — 참고용)
   repositories:
     app: team04-hotel/payment-service
-    migrations: team04-hotel/payment-migrations # TODO: Terraform 11-registry 에 리포지토리 추가 필요
-# 비밀이 아닌 설정만 (비밀값은 Secrets Manager 에서 결제 서버가 직접 읽음)
+    migrations: team04-hotel/payment-migrations
+    mock: team04-hotel/pg-mock-service
+
+# 비밀이 아닌 설정만. 값은 문자열로 넘어갑니다.
+# 인프라가 넣는 값은 여기서 바꿀 수 없습니다 (validate · 결제 서버 agent 가 거부):
+#   PAYMENT_DB_* · TOSS_SECRET_KEY · SQS_* · PAYMENT_RESULT_QUEUE_URL · PG_MOCK_SERVICE_URL · AWS_* · HEALTH_PORT
 env:
   NODE_ENV: production
+  # TOSS = 토스 테스트 · 실결제 API, MOCK = 결제 VPC 의 pg-mock 인스턴스 (부하 테스트). PR 로 전환
   PAYMENT_PROVIDER: TOSS
-  SQS_ENDPOINT: "" # 비움 = AWS 기본 주소 (자격증명은 인스턴스 IAM 역할)
-  SQS_REGION: us-east-1
-  PAYMENT_RESULT_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/<account-id>/payment-result.fifo" # TODO
-  # 메인 클러스터의 booking-service gRPC — prod 에는 결제 → 메인 방향 경로가 없음 (PrivateLink 는 메인 → 결제만).
-  # 백엔드가 결제 → booking 호출을 없애기 전까지는 미정 (README "알려진 제약")
-  BOOKING_SERVICE_HOST: ""
