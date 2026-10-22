@@ -2,8 +2,9 @@
 # PR 검증 (GitHub Actions validate.yml 이 실행 — 로컬에서도 같은 명령으로 실행 가능)
 #   1) 앱 정의(envs/prod/*/chart.yaml) 형식 — type 별 필수 값, git 차트는 커밋 SHA 고정
 #   2) 이미지 태그가 커밋 SHA 형식인지 (latest · 브랜치 이름 금지)
-#   2-1) 이미지 태그 · backend chart revision 이 모노레포 main 이력의 커밋인지 (리뷰를 거쳐 main 에 들어간 코드만 배포)
+#   2-1) 이미지 태그 · backend chart revision · 프론트 version 이 모노레포 main 이력의 커밋인지 (리뷰를 거쳐 main 에 들어간 코드만 배포)
 #        REQUIRE_MAIN_HISTORY=false(구축 기간, 첫 릴리스 전)면 main 밖 SHA 는 경고만. 로컬 기본값은 true
+#   2-3) 프론트 values (version 40자 SHA, build 는 VITE_* 키만) — envs/prod/frontend 가 없으면(첫 프론트 릴리스 전) 건너뜀
 #   3) 앱마다 배포 agent 와 같은 차트 · values 로 렌더링 (helm template)
 #   4) 렌더링 결과 Kubernetes 스키마 검증 (kubeconform)
 # enabled: false 인 앱은 1) 의 형식만 보고 2) – 4) 에서 뺀다.
@@ -72,6 +73,9 @@ for pair in "backend/values.yaml:.global.imageTag" "payment/values.yaml:.image.i
   echo "OK $file → $tag"
 done
 
+# 프론트는 앱 정의가 아니다 (agent 가 읽지 않고 sync-frontend-version 이 CloudFront KeyValueStore 에 씀)
+frontend_values="$ENV_DIR/frontend/values.yaml"
+
 echo "== 2-1) 모노레포 main 이력"
 # validate.yml 의 env. 첫 릴리스(rc.1) gitops PR 이 merge 된 뒤 true 로 바꾼다 (그 전 값은 develop 커밋)
 REQUIRE_MAIN_HISTORY="${REQUIRE_MAIN_HISTORY:-true}"
@@ -88,6 +92,7 @@ if [[ -f "$backend_def" ]] && enabled "$ENV_DIR/backend"; then
     "backend/values.yaml .global.imageTag"
     "payment/values.yaml .image.imageTag"
   )
+  [[ -f "$frontend_values" ]] && checks+=("frontend/values.yaml .version")
   for c in "${checks[@]}"; do
     file="${c% *}"
     expr="${c#* }"
@@ -129,6 +134,20 @@ done < <(yq '(.env // {}) | keys | .[]' "$payment_values")
 provider="$(yq '.env.PAYMENT_PROVIDER // ""' "$payment_values")"
 [[ "$provider" == "TOSS" || "$provider" == "MOCK" ]] || fail "payment/values.yaml env.PAYMENT_PROVIDER 는 TOSS 또는 MOCK 이어야 합니다: $provider"
 echo "OK payment env ($(yq '(.env // {}) | keys | join(" ")' "$payment_values"))"
+
+echo "== 2-3) 프론트 values"
+if [[ -f "$frontend_values" ]]; then
+  # CloudFront Function 이 40자 SHA 만 경로로 쓴다 (짧은 SHA 는 503). 자리표시(0) 는 2-1 이 판단
+  version="$(yq '.version' "$frontend_values")"
+  [[ "$version" =~ ^[0-9a-f]{40}$ ]] || fail "frontend/values.yaml version 은 커밋 SHA(40자)여야 합니다: $version"
+  # build 는 빌드에 들어간 값의 기록 — 공개 Vite 변수만 (모노레포 release:frontend 와 같은 규칙)
+  while IFS= read -r key; do
+    [[ "$key" =~ ^VITE_[A-Z0-9_]+$ ]] || fail "frontend/values.yaml build 에는 VITE_* 키만 둡니다: $key"
+  done < <(yq '(.build // {}) | keys | .[]' "$frontend_values")
+  echo "OK frontend version → ${version:0:8}"
+else
+  echo "건너뜀 (envs/prod/frontend 없음 — 첫 프론트 릴리스 전)"
+fi
 
 echo "== 3) helm template"
 mkdir -p "$WORK/rendered"
