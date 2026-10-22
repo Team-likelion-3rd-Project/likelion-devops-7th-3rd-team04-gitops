@@ -116,6 +116,20 @@ else
   echo "건너뜀 (backend enabled: false)"
 fi
 
+echo "== 2-2) 결제 서버 env"
+# 결제 서버 pull agent(모노레포 60-payment-app templates/payment-deploy.sh)와 같은 규칙. merge 전에 막는다
+payment_values="$ENV_DIR/payment/values.yaml"
+reserved='^(PAYMENT_DB_.*|TOSS_SECRET_KEY|SQS_.*|PAYMENT_RESULT_QUEUE_URL|PG_MOCK_SERVICE_URL|AWS_.*|HEALTH_PORT)$'
+while IFS= read -r key; do
+  [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || fail "payment/values.yaml env 키는 대문자 · 숫자 · _ 만 씁니다: $key"
+  [[ "$key" =~ $reserved ]] && fail "payment/values.yaml env.$key 는 인프라(Terraform · Secrets Manager)가 넣는 값이라 쓸 수 없습니다"
+done < <(yq '(.env // {}) | keys | .[]' "$payment_values")
+[[ "$(yq '[(.env // {}) | .[] | select(tag == "!!map" or tag == "!!seq" or (tostring | test("\n")))] | length' "$payment_values")" == "0" ]] ||
+  fail "payment/values.yaml env 값은 한 줄 문자열이어야 합니다"
+provider="$(yq '.env.PAYMENT_PROVIDER // ""' "$payment_values")"
+[[ "$provider" == "TOSS" || "$provider" == "MOCK" ]] || fail "payment/values.yaml env.PAYMENT_PROVIDER 는 TOSS 또는 MOCK 이어야 합니다: $provider"
+echo "OK payment env ($(yq '(.env // {}) | keys | join(" ")' "$payment_values"))"
+
 echo "== 3) helm template"
 mkdir -p "$WORK/rendered"
 # clusterValues: true 인 앱은 배포 agent 가 클러스터 값(계정 ID 등)을 더 넘긴다. 검증은 더미 값으로 한다.
