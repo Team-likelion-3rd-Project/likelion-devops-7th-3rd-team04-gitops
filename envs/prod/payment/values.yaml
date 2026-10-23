@@ -9,13 +9,12 @@
 # 결제 쪽 계약(payment.proto, SQS 메시지, 결제 마이그레이션)이 바뀌는 배포는 이 파일을 먼저 merge·반영한 뒤 backend 를 올립니다.
 
 image:
-  imageTag: "2c30ddc062a0973009e217ad3c57296134cc990f" # 릴리스 main 커밋 SHA (GitLab release:gitops-pr)
+  imageTag: "0f42096f052fb7f81496426e87a11f260a12e2cb" # 릴리스 main 커밋 SHA (GitLab release:gitops-pr)
   # 같은 태그로 아래 이미지를 씀 (레지스트리 · 저장소는 Terraform 이 정함 — 참고용)
   repositories:
     app: team04-hotel/payment-service
     migrations: team04-hotel/payment-migrations
     mock: team04-hotel/pg-mock-service
-
 # 비밀이 아닌 설정만. 값은 문자열로 넘어갑니다.
 # 인프라가 넣는 값은 여기서 바꿀 수 없습니다 (validate · 결제 서버 agent 가 거부):
 #   PAYMENT_DB_* · TOSS_SECRET_KEY · SQS_* · PAYMENT_RESULT_QUEUE_URL · PG_MOCK_SERVICE_URL · AWS_* · HEALTH_PORT
