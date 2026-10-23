@@ -13,13 +13,15 @@ global:
   imageRegistry: "{{ .Values.global.awsAccountId }}.dkr.ecr.us-east-1.amazonaws.com"
   imageRepositoryPrefix: team04-hotel/
   # 커밋 SHA (latest 금지 — 차트가 렌더링을 거부, ECR 도 IMMUTABLE)
-  imageTag: "0f42096f052fb7f81496426e87a11f260a12e2cb" # 릴리스 main 커밋 SHA (GitLab release:gitops-pr)
+  imageTag: "0f42096f052fb7f81496426e87a11f260a12e2cb" # rc.2 릴리스 (검증 중 그대로)
   # 워커 kubelet 이 노드 Role 로 ECR pull (ecr-credential-provider, Ansible aws_ecr_credential_provider) → imagePullSecret 불필요
   imagePullSecrets: []
   secretName: backend-secrets
+
 # 서비스별 SA — IRSA 매핑(pod-identity-webhook values)이 backend/<서비스 이름> 기준
 serviceAccounts:
   create: true
+
 # api-gateway 외부 노출: ALB(Terraform 80-main-edge) → 워커 NodePort 30080 → Traefik → api-gateway
 ingress:
   enabled: true
@@ -28,6 +30,7 @@ ingress:
   host: "api.meomulm.click"
   paths:
     - /api
+
 services:
   api-gateway:
     replicas: 2
@@ -61,16 +64,33 @@ services:
       REDIS_TLS: "true"
   chat-bot-service:
     env:
+      # DYNAMODB_ENDPOINT 미설정 = AWS 기본 주소, 자격 증명은 IRSA(team04-hotel-chat-bot-service, 두 테이블 PutItem · Query 만)
       DYNAMODB_REGION: us-east-1
-      # 41-main-data dynamodb_table_names. 테이블 접근 IRSA 와 n8n 은 82-gcp-llm 에서 (그 전까지 채팅 요청은 실패)
+      # 41-main-data dynamodb_table_names (매일 재생성 — 대화 이력은 다음 날 초기화)
       DYNAMODB_CHAT_SESSIONS_TABLE: team04-hotel-ChatSessions
       DYNAMODB_CHAT_MESSAGES_TABLE: team04-hotel-ChatMessages
+  # 챗봇 답변 (chat-bot-service → n8n → llm-service → Vertex AI). 이미지 태그는 global.imageTag
+  llm-service:
+    enabled: true
+    # 검증용: 릴리스 전이라 수동 push 한 이미지 (검증 후 ECR 에서 삭제)
+    image:
+      tag: ldp143-verify
+    # GCP 서비스 계정 키를 쓰지 않는다 — 아래 gcpWorkloadIdentity 로 인증
+    secretEnv: []
+    gcpWorkloadIdentity: true
+    env:
+      # RAG 벡터 저장소 (Terraform 15-chatbot-vectors 🔒). 자격 증명은 IRSA(team04-hotel-llm-service, 조회만)
+      VECTOR_STORE: s3vectors
+      VECTOR_BUCKET_NAME: team04-hotel-chatbot-vectors
+      VECTOR_INDEX_NAME: hotel-docs
+      AWS_REGION: us-east-1
   # prod 는 결제 VPC 의 결제 서버(클러스터 밖)가 운영 → 클러스터에는 배포하지 않음. 이미지 태그는 envs/prod/payment
   payment-service:
     enabled: false
   # prod 는 실제 PG(토스)를 결제 서버가 직접 호출 → 목업 불필요
   pg-mock-service:
     enabled: false
+
 migrations:
   # 메인 DB(RDS, 41-main-data) — 배포 직전 hook 으로 Flyway 적용. RDS 서버 인증서를 검증하는 TLS 로 접속
   # Flyway 이미지의 드라이버는 MariaDB Connector/J 2.x 라 3.x 옵션 sslMode 는 무시되고 평문으로 붙는다.
@@ -79,7 +99,42 @@ migrations:
     enabled: true
     db:
       jdbcParams: "useSsl=true&serverSslCert=/flyway/certs/us-east-1-bundle.pem"
-      caConfigMap: rds-ca-bundle # backend-secrets 앱
+      caConfigMap: rds-ca-bundle   # backend-secrets 앱
   # 결제 DB 는 결제 서버 쪽에서 적용 (클러스터에서 결제 DB 에 접근하지 않음)
   payment:
     enabled: false
+
+# 챗봇 오케스트레이션 워크플로. 이미지는 Docker Hub n8nio/n8n 을 GitLab release:mirror-n8n 이 ECR 로 옮긴 것 (태그 = 차트 n8n.image.tag)
+# owner 비밀번호(워크플로 활성화용 내부 계정)는 backend-secrets 의 N8N_INIT_OWNER_PASSWORD (41-main-data, 매일 새 값)
+n8n:
+  enabled: true
+
+# GCP Workload Identity Federation (Terraform 14-gcp-llm 🔒 output, 모두 공개 값 — 키 없음)
+#   llm-service · llm-ingest 파드 projected 토큰 → STS → llm-service-prod impersonate → Vertex AI
+gcpWorkloadIdentity:
+  enabled: true
+  audience: "//iam.googleapis.com/projects/1066485667715/locations/global/workloadIdentityPools/team04-hotel-prod/providers/main-cluster"
+  serviceAccountEmail: llm-service-prod@likelion-devops-7th-3rd-team4.iam.gserviceaccount.com
+
+# RAG 문서 적재 Job — 릴리스마다 llm-service 이미지의 문서(app/corpus.py)를 임베딩해 15-chatbot-vectors 인덱스에 넣는다.
+# 문서 id 가 key 라 중복되지 않는다. 자격 증명은 IRSA(team04-hotel-llm-ingest, 쓰기만) + GCP Workload Identity
+llmIngest:
+  enabled: true
+
+# 초기 데이터 시딩 Job (LDP-141) — 메인 DB 를 매일 새로 만들므로 배포마다 호텔 · 객실 · 재고 · 관리자 계정 · 객실 사진을 채운다.
+# 마이그레이션 hook 뒤에 실행되는 일반 Job 이라 실패해도 서비스 배포는 롤백되지 않는다. 이미지 태그는 global.imageTag 와 같음
+seed:
+  enabled: true
+  # 검증용: 릴리스 전이라 수동 push 한 이미지 (검증 후 ECR 에서 삭제)
+  image:
+    tag: ldp143-verify
+  env:
+    # 객실 사진 버킷 (13-frontend, 매일 재생성되지 않음). 고정 키 room-types/<객실 종류 ID>/seed-<파일>, 이미 있으면 올리지 않음
+    # 엔드포인트 · 키를 비우면 AWS 기본 주소 + IRSA(team04-hotel-seed, room-types/* PutObject 만)
+    S3_BUCKET: team04-hotel-room-images
+    S3_REGION: us-east-1
+  # 관리자 계정 Secret (backend-secrets 앱의 ExternalSecret ← Secrets Manager team04-hotel/prod/seed-admin, Terraform 12-secrets)
+  adminSecretName: seed-admin
+  db:
+    # RDS 서버 인증서 · 호스트 이름 검증 TLS (require_secure_transport 를 켜도 접속됨)
+    caConfigMap: rds-ca-bundle   # backend-secrets 앱
