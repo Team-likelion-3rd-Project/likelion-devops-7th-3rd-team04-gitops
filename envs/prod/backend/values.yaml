@@ -24,15 +24,16 @@ serviceAccounts:
 ingress:
   enabled: true
   className: traefik
-  # 비우면 host 규칙 없이 ALB 로 들어온 모든 이름을 라우팅. TODO: 도메인 구매 후 api.<도메인>
-  host: ""
+  # api.<도메인> 만 라우팅 (Terraform 80-main-edge 가 같은 이름의 Route53 레코드 생성). ALB DNS 이름으로 직접 오는 요청은 404
+  host: "api.meomulm.click"
   paths:
     - /api
 services:
   api-gateway:
     replicas: 2
     env:
-      CORS_ORIGIN: "https://www.example.com" # TODO: 프론트 도메인 (81-frontend, 도메인 구매 후)
+      # 프론트(81-frontend) 출처. 하나만 허용하므로 www 는 CloudFront 에서 루트로 리다이렉트
+      CORS_ORIGIN: "https://meomulm.click"
       # 결제 서버는 결제 VPC — 메인 VPC 의 PrivateLink 엔드포인트 Route 53 고정 이름으로 호출 (2-3, 60-payment-app)
       # TODO(2-3): PAYMENT_SERVICE_HOST
   booking-service:
