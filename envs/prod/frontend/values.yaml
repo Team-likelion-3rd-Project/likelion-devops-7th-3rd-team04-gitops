@@ -1,0 +1,21 @@
+# prod 프론트엔드 (CloudFront + S3, Terraform 13-frontend) 의 배포 상태. 앱 정의(chart.yaml)가 아니라 배포 agent 는 읽지 않습니다.
+#
+# version = 운영에 띄울 빌드(모노레포 main 커밋 SHA 40자). 빌드는 GitLab release:frontend 가 S3 releases/<SHA>/ 에 미리 올려 둡니다.
+# merge 하면 gitops sync-frontend-version workflow 가 CloudFront KeyValueStore 의 version 을 이 값으로 바꾸고,
+# CloudFront Function 이 요청마다 그 값을 읽어 /releases/<SHA>/ 를 응답합니다 (수 초 안에 반영, 무효화 불필요).
+#
+# 롤백: 프론트만 → 이 파일의 version 을 이전 릴리스 SHA 로 바꾸는 PR / 릴리스 전체 → 릴리스 PR revert
+#   (S3 수명 주기로 180일 지난 릴리스는 지워지므로 그 안의 SHA 로만 돌아갈 수 있습니다)
+#
+# ⚠️ public 레포로 복사됩니다. build 에는 브라우저에 그대로 노출되는 공개 값만 넣습니다.
+
+version: "0f42096f052fb7f81496426e87a11f260a12e2cb" # 릴리스 main 커밋 SHA (GitLab release:gitops-pr)
+# 빌드 때 넣는 Vite 환경 변수. release:frontend 가 모노레포의 이 파일(infra/gitops/prod/frontend)을 읽어 빌드합니다.
+# 빌드 결과(JS)에 들어가므로 gitops 레포에서 바꿔도 반영되지 않습니다 — 모노레포에서 고친 뒤 새 릴리스로 냅니다.
+build:
+  # api-gateway (Terraform 80-main-edge ALB, Route53 api.<도메인>)
+  VITE_API_URL: "https://api.meomulm.click"
+  # 결제 서버 PAYMENT_PROVIDER(gitops envs/prod/payment)와 같은 값. TOSS = 토스 결제위젯, MOCK = 결제창 없이 승인 요청
+  VITE_PAYMENT_MODE: "TOSS"
+  # VITE_TOSS_CLIENT_KEY 는 여기에 두지 않습니다 — Terraform 12-secrets 의 Parameter Store
+  #   /team04-hotel/prod/frontend/toss-client-key 를 release:prepare 가 읽어 빌드에 넣습니다 (값이 있으면 빌드가 거부)

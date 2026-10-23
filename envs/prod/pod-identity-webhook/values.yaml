@@ -15,6 +15,10 @@ config:
       "backend/booking-service":
         RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-booking-service"
         Audience: sts.amazonaws.com
+      # 객실 사진 Presigned PUT 서명 · 업로드 확인 · 삭제 (13-frontend 사진 버킷)
+      "backend/hotel-service":
+        RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-hotel-service"
+        Audience: sts.amazonaws.com
 
 # 파드 생성마다 호출되므로 워커 2대에 나눠 띄운다
 replicaCount: 2

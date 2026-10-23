@@ -13,7 +13,7 @@ global:
   imageRegistry: "{{ .Values.global.awsAccountId }}.dkr.ecr.us-east-1.amazonaws.com"
   imageRepositoryPrefix: team04-hotel/
   # 커밋 SHA (latest 금지 — 차트가 렌더링을 거부, ECR 도 IMMUTABLE)
-  imageTag: "2c30ddc062a0973009e217ad3c57296134cc990f" # 릴리스 main 커밋 SHA (GitLab release:gitops-pr)
+  imageTag: "0f42096f052fb7f81496426e87a11f260a12e2cb" # 릴리스 main 커밋 SHA (GitLab release:gitops-pr)
   # 워커 kubelet 이 노드 Role 로 ECR pull (ecr-credential-provider, Ansible aws_ecr_credential_provider) → imagePullSecret 불필요
   imagePullSecrets: []
   secretName: backend-secrets
@@ -32,18 +32,29 @@ services:
   api-gateway:
     replicas: 2
     env:
-      # 프론트(81-frontend) 출처. 하나만 허용하므로 www 는 CloudFront 에서 루트로 리다이렉트
+      # 프론트(13-frontend) 출처. 하나만 허용하므로 www 는 CloudFront 에서 루트로 리다이렉트
       CORS_ORIGIN: "https://meomulm.click"
-      # 결제 서버는 결제 VPC — 메인 VPC 의 PrivateLink 엔드포인트 Route 53 고정 이름으로 호출 (2-3, 60-payment-app)
-      # TODO(2-3): PAYMENT_SERVICE_HOST
+      # 결제 서버는 결제 VPC — 메인 VPC 의 PrivateLink 엔드포인트 고정 이름으로 호출 (Terraform 71-payment-link, 재생성해도 같음)
+      PAYMENT_SERVICE_HOST: "payment.team04-hotel.internal:3004"
   booking-service:
     replicas: 2
     env:
-      # TODO(2-3): PAYMENT_SERVICE_HOST (PrivateLink)
+      # 결제 서버 gRPC (PrivateLink, Terraform 71-payment-link)
+      PAYMENT_SERVICE_HOST: "payment.team04-hotel.internal:3004"
       # 결제 결과 이벤트 (SQS FIFO, 43-messaging). SQS_ENDPOINT 비움 = AWS 기본 주소, 자격 증명은 IRSA(team04-hotel-booking-service)
       SQS_ENDPOINT: ""
       SQS_REGION: us-east-1
       PAYMENT_RESULT_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/{{ .Values.global.awsAccountId }}/payment-result.fifo"
+  hotel-service:
+    env:
+      # 객실 사진 버킷 (13-frontend). 엔드포인트 · 키를 비우면 AWS 기본 주소 + IRSA(team04-hotel-hotel-service)
+      S3_BUCKET: team04-hotel-room-images
+      S3_REGION: us-east-1
+      S3_FORCE_PATH_STYLE: "false"
+      S3_ENDPOINT: ""
+      S3_PUBLIC_ENDPOINT: ""
+      # 사진 보기 = 서명 없는 CloudFront 고정 URL <IMAGE_BASE_URL>/<objectKey> (/room-types/* behavior). 올리기는 Presigned PUT
+      IMAGE_BASE_URL: "https://meomulm.click"
   auth-service:
     env:
       # ElastiCache Valkey 는 전송 암호화 required (41-main-data)
@@ -62,10 +73,12 @@ services:
     enabled: false
 migrations:
   # 메인 DB(RDS, 41-main-data) — 배포 직전 hook 으로 Flyway 적용. RDS 서버 인증서를 검증하는 TLS 로 접속
+  # Flyway 이미지의 드라이버는 MariaDB Connector/J 2.x 라 3.x 옵션 sslMode 는 무시되고 평문으로 붙는다.
+  # 2.x 는 useSsl + serverSslCert 이고 호스트 이름 검증은 기본으로 켜져 있다
   main:
     enabled: true
     db:
-      jdbcParams: "sslMode=verify-full&serverSslCert=/flyway/certs/us-east-1-bundle.pem"
+      jdbcParams: "useSsl=true&serverSslCert=/flyway/certs/us-east-1-bundle.pem"
       caConfigMap: rds-ca-bundle # backend-secrets 앱
   # 결제 DB 는 결제 서버 쪽에서 적용 (클러스터에서 결제 DB 에 접근하지 않음)
   payment:
