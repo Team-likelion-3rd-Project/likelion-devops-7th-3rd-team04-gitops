@@ -19,6 +19,26 @@ config:
       "backend/hotel-service":
         RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-hotel-service"
         Audience: sts.amazonaws.com
+      # 시드 Job 의 객실 사진 올리기 (13-frontend 사진 버킷 room-types/* PutObject 만). SA 는 backend 차트(seed.enabled)가 만든다
+      "backend/seed":
+        RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-seed"
+        Audience: sts.amazonaws.com
+      # 챗봇 (LDP-143). 대화 테이블(41-main-data DynamoDB) PutItem · Query
+      "backend/chat-bot-service":
+        RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-chat-bot-service"
+        Audience: sts.amazonaws.com
+      # RAG 인덱스(15-chatbot-vectors) 조회만. Vertex AI 는 GCP Workload Identity (IRSA 아님)
+      "backend/llm-service":
+        RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-llm-service"
+        Audience: sts.amazonaws.com
+      # RAG 적재 Job 의 인덱스 쓰기만. SA 는 backend 차트(llmIngest.enabled)가 만든다
+      "backend/llm-ingest":
+        RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-llm-ingest"
+        Audience: sts.amazonaws.com
+      # 클러스터 로그 수집 (LDP-144). 21-observability-base 로그 그룹 쓰기 · 로그 버킷 app-logs/main-cluster/ PutObject 만
+      "fluent-bit/fluent-bit":
+        RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-fluent-bit"
+        Audience: sts.amazonaws.com
 
 # 파드 생성마다 호출되므로 워커 2대에 나눠 띄운다
 replicaCount: 2

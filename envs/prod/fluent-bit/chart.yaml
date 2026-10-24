@@ -1,0 +1,10 @@
+# aws-for-fluent-bit — 모든 노드(CP 포함)의 파드 로그를 CloudWatch Logs 와 로그 버킷 app-logs/main-cluster/ 로 보낸다.
+# 로그 그룹은 Terraform 21-observability-base, AWS 권한은 IRSA(pod-identity-webhook 매핑 fluent-bit/fluent-bit → team04-hotel-fluent-bit)
+type: helm
+repo: https://aws.github.io/eks-charts
+chart: aws-for-fluent-bit
+version: "0.2.0"   # aws-for-fluent-bit 3.2.1
+namespace: fluent-bit
+release: fluent-bit
+# IRSA 를 주입받으므로 pod-identity-webhook 다음. 앞 앱의 로그는 파일 처음부터 읽어(Read_from_Head) 빠지지 않는다
+order: 25
