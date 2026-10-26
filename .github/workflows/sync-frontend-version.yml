@@ -7,6 +7,9 @@
 # AWS 자격 증명은 GitHub OIDC 로 받습니다 (sync-payment-tag 와 같은 Role, 모노레포 Terraform 10-global github-oidc.tf).
 # 이 KeyValueStore 갱신 권한은 13-frontend release.tf 가 붙입니다 — S3 쓰기 권한은 없어 업로드는 할 수 없습니다.
 #
+# 버전을 바꾼 경우 · 갱신에 실패한 경우 배포 결과를 배포 토픽(10-global team04-hotel-deploy → AWS Chatbot → Slack #deploy)에 발행합니다.
+# 같은 Role 에 그 토픽 Publish 만 있습니다 (10-global notifications.tf). 토픽 ARN 은 자격 증명의 계정 ID 로 만듭니다.
+#
 # ⚠️ public 레포라 Actions 로그도 공개입니다. KeyValueStore ARN(계정 ID 포함)은 Secret FRONTEND_KVS_ARN 으로 넣고 계정 ID 마스킹도 켭니다.
 name: sync-frontend-version
 
@@ -53,6 +56,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: AWS 자격 증명 (GitHub OIDC)
+        id: aws
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_SSM_SYNC_ROLE_ARN }}
@@ -62,6 +66,7 @@ jobs:
 
       # KeyValueStore API 는 SigV4A 서명이라 AWS CLI v2(CRT 포함)가 필요합니다 — ubuntu-24.04 러너 기본 aws 가 v2
       - name: KeyValueStore 갱신
+        id: kvs
         env:
           KVS_ARN: ${{ secrets.FRONTEND_KVS_ARN }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -69,6 +74,7 @@ jobs:
         run: |
           current="$(aws cloudfront-keyvaluestore get-key --kvs-arn "$KVS_ARN" --key version --query Value --output text)"
           echo "현재 값: $current"
+          echo "previous=$current" >> "$GITHUB_OUTPUT"
           if [[ "$PLACEHOLDER" == "true" ]]; then
             exit 0
           fi
@@ -83,3 +89,32 @@ jobs:
           etag="$(aws cloudfront-keyvaluestore describe-key-value-store --kvs-arn "$KVS_ARN" --query ETag --output text)"
           aws cloudfront-keyvaluestore put-key --kvs-arn "$KVS_ARN" --key version --value "$VERSION" --if-match "$etag" > /dev/null
           echo "갱신: $current → $VERSION"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      # 실패해도 job 결과는 바꾸지 않습니다 (알림은 부가 기능)
+      - name: 배포 결과 알림 (Slack #deploy)
+        if: always() && steps.aws.outcome == 'success' && (steps.kvs.outputs.changed == 'true' || steps.kvs.outcome == 'failure')
+        continue-on-error: true
+        env:
+          RESULT: ${{ steps.kvs.outcome }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PREVIOUS: ${{ steps.kvs.outputs.previous }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          account="$(aws sts get-caller-identity --query Account --output text)"
+          topic="arn:aws:sns:us-east-1:${account}:team04-hotel-deploy"
+          if [[ "$RESULT" == "success" ]]; then
+            title=":white_check_mark: 프론트 배포 성공"
+          else
+            title=":x: 프론트 배포 실패 (운영 버전은 그대로)"
+          fi
+          message="$(jq -cn --arg title "$title" --arg result "$RESULT" --arg version "$VERSION" \
+            --arg previous "${PREVIOUS:-?}" --arg run "$RUN_URL" '
+            {version: "1.0", source: "custom",
+             content: {
+               textType: "client-markdown",
+               title: $title,
+               description: ("*릴리스* `\($version[0:8])`\n*이전* `\($previous[0:8])`\n<\($run)|Actions 실행 로그>")},
+             metadata: {summary: $title, eventType: ("frontend_deploy_" + $result),
+                        additionalContext: {release: $version}}}')"
+          aws sns publish --topic-arn "$topic" --message "$message" > /dev/null
