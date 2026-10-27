@@ -1,0 +1,35 @@
+# root 앱 차트 values. 클러스터마다 다른 값은 root Application 을 만드는 쪽이 넘긴다
+# (70: Ansible roles/argocd aws.yml, 72: Terraform) — 이 파일에는 계정 ID 를 넣지 않는다.
+
+gitopsRepoURL: https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team04-gitops.git
+appsPath: envs/prod
+
+# root 가 렌더링하는 gitops 커밋 SHA. root Application 이 helm parameter 로 $ARGOCD_APP_REVISION 을 넘긴다.
+# 하위 앱의 gitops 소스(values · local 차트)를 이 SHA 에 고정해 gitops 커밋 하나가 root sync 한 번(= 릴리스 하나)이 된다.
+# 비어 있으면(로컬 helm template) main
+gitopsRevision: ""
+
+# chart.yaml 에 clusterValues: true 인 앱에 helm valuesObject 로 넘기는 값 (앱 values.yaml 보다 우선).
+# public 레포에 둘 수 없는 클러스터 값만 둔다. 예: {global: {awsAccountId: "123456789012"}}
+clusterValues: {}
+
+destinationServer: https://kubernetes.default.svc
+
+# 하위 앱 자동 sync 재시도. 자동 롤백은 없다 — 무제한 재시도(limit < 0)로 순서 의존(CRD · webhook · Secret)을 기다리고,
+# 끝나지 않는 배포는 root sync 시간 제한(argocd-cmd-params-cm controller.sync.timeout.seconds)이 실패로 끝내 알린다
+syncRetry:
+  limit: -1
+  backoff:
+    duration: 10s
+    factor: 2
+    maxDuration: 3m
+
+# 배포 결과 알림 (Slack #deploy). root PostSync(성공) · SyncFail(실패) hook Job 이 10-global 배포 토픽에 발행한다.
+# clusterValues.global.awsAccountId 가 없으면(로컬 렌더링) 만들지 않는다. 이름은 Terraform 과 같아야 한다
+deployNotify:
+  region: us-east-1
+  topicName: team04-hotel-deploy      # 10-global deploy_topic_name
+  roleName: team04-hotel-deploy-notify # 70 irsa.tf deploy-notify (신뢰 sub system:serviceaccount:argocd:deploy-notify)
+  # kubectl · jq · aws(v1) 포함. 태그 변조를 막으려고 digest(멀티 아키텍처 index)로 고정.
+  # kubectl 은 클러스터 버전(1.35)과 마이너 ±1 안에서 맞춘다. 올릴 때: docker buildx imagetools inspect alpine/k8s:<버전>
+  image: "docker.io/alpine/k8s:1.35.9@sha256:b9cb6db0091a2327c0a56ecda69d37fa830c7a96ea669e7382b3ee778aa07a24"

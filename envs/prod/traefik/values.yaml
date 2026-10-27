@@ -13,8 +13,17 @@ ingressClass:
 providers:
   kubernetesIngress:
     enabled: true
+    # Service(NodePort) status 를 복사하지 않고 아래 additionalArguments 의 hostname 을 쓴다 (켜 두면 hostname 보다 우선)
+    publishedService:
+      enabled: false
   kubernetesCRD:
     enabled: true
+
+# Ingress status(loadBalancer.ingress)에 진입 주소를 쓴다. NodePort Service 라 Traefik 이 채울 값이 없는데,
+# ArgoCD 는 status 가 비어 있는 Ingress 를 Progressing 으로 봐서 root 앱이 다음 sync-wave 로 넘어가지 못한다.
+# 값은 앞단 80-main-edge ALB 의 API 도메인 (frontend/values.yaml build.VITE_API_URL 과 같음)
+additionalArguments:
+  - --providers.kubernetesingress.ingressendpoint.hostname=api.meomulm.click
 
 ports:
   web:

@@ -45,7 +45,7 @@ volumeMounts:
 input:
   memBufLimit: 10MB
   # 위치 DB(input.db, 노드 /var/log) 가 없는 첫 실행에는 파일 처음부터 읽는다 — Fluent Bit 보다 먼저 뜬 파드
-  # (kube-system · calico · gitops-sync · traefik 등)의 시작 로그를 빠뜨리지 않는다. 재시작 후에는 DB 위치부터 이어 읽는다
+  # (kube-system · calico · argocd · traefik 등)의 시작 로그를 빠뜨리지 않는다. 재시작 후에는 DB 위치부터 이어 읽는다
   extraInputs: |
     Read_from_Head    On
 
@@ -64,7 +64,7 @@ additionalFilters: |
       Name    lua
       Match   kube.*
       call    set_log_group
-      code    local known = {["kube-system"]=true, ["tigera-operator"]=true, ["calico-system"]=true, ["calico-apiserver"]=true, ["gitops-sync"]=true, ["traefik"]=true, ["cert-manager"]=true, ["pod-identity-webhook"]=true, ["fluent-bit"]=true, ["whoami"]=true, ["external-secrets"]=true, ["backend"]=true} function set_log_group(tag, ts, record) local k = record["kubernetes"] local ns = k and k["namespace_name"] if not (ns and known[ns]) then ns = "other" end record["log_group_ns"] = ns return 2, ts, record end
+      code    local known = {["kube-system"]=true, ["tigera-operator"]=true, ["calico-system"]=true, ["calico-apiserver"]=true, ["argocd"]=true, ["traefik"]=true, ["cert-manager"]=true, ["pod-identity-webhook"]=true, ["fluent-bit"]=true, ["whoami"]=true, ["external-secrets"]=true, ["backend"]=true} function set_log_group(tag, ts, record) local k = record["kubernetes"] local ns = k and k["namespace_name"] if not (ns and known[ns]) then ns = "other" end record["log_group_ns"] = ns return 2, ts, record end
 
 cloudWatchLogs:
   enabled: true

@@ -1,7 +1,7 @@
 # amazon-eks-pod-identity-webhook chart values (prod)
 #
 # ns/SA → Role 매핑은 SA annotation 대신 여기(ConfigMap pod-identity-webhook)에 모은다.
-# Role ARN 의 계정 ID 는 public 레포에 두지 않고 배포 agent 가 넘기는 global.awsAccountId 로 채운다.
+# Role ARN 의 계정 ID 는 public 레포에 두지 않고 ArgoCD root 앱이 넘기는 global.awsAccountId 로 채운다.
 # 매핑을 추가할 때는 Terraform 70 irsa.tf 의 irsa_roles(신뢰 정책 sub) 에도 같은 ns/SA 를 추가한다
 config:
   defaultAwsRegion: us-east-1
@@ -58,7 +58,7 @@ affinity:
 mutatingWebhook:
   # Ignore 면 webhook 이 준비되기 전에 만든 파드가 자격 증명 없이 떠서 그대로 남는다 (재생성 직후 ESO 등).
   # Fail 이면 파드 생성이 거부되고 컨트롤러가 다시 만들어 주입된다.
-  # webhook 장애가 노드 · 네트워크 · 인증서 · 배포 agent 복구를 막지 않도록 아래 네임스페이스는 호출하지 않는다
+  # webhook 장애가 노드 · 네트워크 · 인증서 · 배포(ArgoCD) 복구를 막지 않도록 아래 네임스페이스는 호출하지 않는다
   failurePolicy: Fail
   namespaceSelector:
     matchExpressions:
@@ -70,4 +70,4 @@ mutatingWebhook:
           - calico-system
           - calico-apiserver
           - cert-manager
-          - gitops-sync
+          - argocd

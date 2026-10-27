@@ -5,7 +5,7 @@
 #   2-1) 이미지 태그 · backend chart revision · 프론트 version 이 모노레포 main 이력의 커밋인지 (리뷰를 거쳐 main 에 들어간 코드만 배포)
 #        REQUIRE_MAIN_HISTORY=false(구축 기간, 첫 릴리스 전)면 main 밖 SHA 는 경고만. 로컬 기본값은 true
 #   2-3) 프론트 values (version 40자 SHA, build 는 VITE_* 키만) — envs/prod/frontend 가 없으면(첫 프론트 릴리스 전) 건너뜀
-#   3) 앱마다 배포 agent 와 같은 차트 · values 로 렌더링 (helm template)
+#   3) 앱마다 ArgoCD 와 같은 차트 · values 로 렌더링 (helm template), 3-1) root 앱 차트 렌더링
 #   4) 렌더링 결과 Kubernetes 스키마 검증 (kubeconform)
 # enabled: false 인 앱은 1) 의 형식만 보고 2) – 4) 에서 뺀다.
 # 필요한 도구: git, yq(v4), helm(v3), docker
@@ -16,7 +16,7 @@ ENV_DIR="$ROOT/envs/prod"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-K8S_VERSION="${K8S_VERSION:-1.33.0}"          # 운영 클러스터 kube_version(1.33) 과 맞춤
+K8S_VERSION="${K8S_VERSION:-1.35.0}"          # 운영 클러스터 kube_version(1.35, 모노레포 group_vars/aws.yml) 과 맞춤
 KUBECONFORM_IMAGE="ghcr.io/yannh/kubeconform:v0.6.7"
 
 fail() { echo "❌ $*" >&2; exit 1; }
@@ -73,7 +73,7 @@ for pair in "backend/values.yaml:.global.imageTag" "payment/values.yaml:.image.i
   echo "OK $file → $tag"
 done
 
-# 프론트는 앱 정의가 아니다 (agent 가 읽지 않고 sync-frontend-version 이 CloudFront KeyValueStore 에 씀)
+# 프론트는 앱 정의가 아니다 (ArgoCD 가 읽지 않고 sync-frontend-version 이 CloudFront KeyValueStore 에 씀)
 frontend_values="$ENV_DIR/frontend/values.yaml"
 
 echo "== 2-1) 모노레포 main 이력"
@@ -151,8 +151,8 @@ fi
 
 echo "== 3) helm template"
 mkdir -p "$WORK/rendered"
-# clusterValues: true 인 앱은 배포 agent 가 클러스터 값(계정 ID 등)을 더 넘긴다. 검증은 더미 값으로 한다.
-# 숫자로 읽히지 않도록 문자열로 쓴다 (agent 도 JSON 문자열로 넘김)
+# clusterValues: true 인 앱은 ArgoCD root 앱이 클러스터 값(계정 ID 등)을 더 넘긴다. 검증은 더미 값으로 한다.
+# 숫자로 읽히지 않도록 문자열로 쓴다 (root 앱도 JSON 문자열로 넘김)
 cat > "$WORK/cluster-values.yaml" <<'EOF'
 {"global": {"awsAccountId": "000000000000"}}
 EOF
@@ -183,6 +183,20 @@ for dir in "${APPS[@]}"; do
     "${values[@]}" > "$WORK/rendered/$app.yaml"
   echo "OK $app $(grep -c '^kind:' "$WORK/rendered/$app.yaml") 개 리소스"
 done
+
+echo "== 3-1) root 앱 차트 (ArgoCD prod-apps)"
+# root 차트(envs/prod/Chart.yaml · templates/)가 앱 정의를 Application 으로 바꾸는지. 클러스터 값 · 커밋은 더미
+if [[ -f "$ENV_DIR/Chart.yaml" ]]; then
+  helm template prod-apps "$ENV_DIR" -n argocd --set-string gitopsRevision=0000000000000000000000000000000000000000 \
+    --set-json "clusterValues=$(cat "$WORK/cluster-values.yaml")" > "$WORK/rendered/_root.yaml"
+  want=0
+  for dir in "${APPS[@]}"; do enabled "$dir" && want=$((want + 1)); done
+  got="$(yq ea '[select(.kind == "Application")] | length' "$WORK/rendered/_root.yaml")"
+  [[ "$got" == "$want" ]] || fail "root 앱 차트의 Application $got 개 ≠ 배포 대상 앱 $want 개"
+  echo "OK root Application $got 개 $(yq ea '[select(.kind == "Application") | .metadata.annotations["argocd.argoproj.io/sync-wave"] + ":" + .metadata.name] | join(" ")' "$WORK/rendered/_root.yaml")"
+else
+  echo "건너뜀 (envs/prod/Chart.yaml 없음 — ArgoCD 전환 전)"
+fi
 
 echo "== 4) kubeconform (Kubernetes $K8S_VERSION)"
 # CRD 리소스(Traefik IngressRoute 등)는 스키마가 없어 건너뜀
