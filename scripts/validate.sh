@@ -16,7 +16,7 @@ ENV_DIR="$ROOT/envs/prod"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-K8S_VERSION="${K8S_VERSION:-1.33.0}"          # 운영 클러스터 kube_version(1.33) 과 맞춤
+K8S_VERSION="${K8S_VERSION:-1.35.0}"          # 운영 클러스터 kube_version(1.35, 모노레포 group_vars/aws.yml) 과 맞춤
 KUBECONFORM_IMAGE="ghcr.io/yannh/kubeconform:v0.6.7"
 
 fail() { echo "❌ $*" >&2; exit 1; }

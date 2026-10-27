@@ -1,0 +1,75 @@
+{{- /*
+앱 폴더(chart.yaml) 하나 = Application 하나. 형식은 README "앱 정의".
+  type helm  → 차트 저장소의 chart · version
+  type git   → 다른 Git 레포의 path · revision(커밋 SHA)
+  type local → 이 레포의 <앱>/<path>
+  values     → 이 레포의 <앱>/values.yaml (두 번째 source ref values, root 와 같은 커밋)
+  order      → sync-wave. root 는 앞 wave 의 Application 이 Healthy(argocd-cm 헬스 체크: Synced + 이 커밋)가 되어야 다음으로 간다
+
+Application 에 finalizer 를 달지 않는다 — 앱 폴더를 지우면 Application 만 지워지고 리소스는 남는다 (지우는 것은 사람이 함).
+*/ -}}
+{{- $rev := include "prod-apps.revision" . -}}
+{{- range (include "prod-apps.apps" . | fromJson).apps }}
+{{- $app := .name }}
+{{- $def := .def }}
+{{- $values := $.Files.Get (printf "%s/values.yaml" $app) }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $app }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    team04.io/root-app: {{ $.Release.Name }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .order | quote }}
+spec:
+  project: prod
+  destination:
+    server: {{ $.Values.destinationServer }}
+    namespace: {{ required (printf "%s: chart.yaml 에 namespace 가 필요합니다" $app) $def.namespace }}
+  sources:
+    {{- if eq $def.type "helm" }}
+    {{- if hasPrefix "oci://" (toString $def.chart) }}
+    {{- fail (printf "%s: oci 차트는 아직 지원하지 않습니다 (ArgoCD 에 OCI 저장소 등록 필요)" $app) }}
+    {{- end }}
+    - repoURL: {{ required (printf "%s: repo 가 필요합니다" $app) $def.repo }}
+      chart: {{ $def.chart }}
+      targetRevision: {{ $def.version | quote }}
+    {{- else if eq $def.type "git" }}
+    - repoURL: {{ required (printf "%s: repo 가 필요합니다" $app) $def.repo }}
+      path: {{ $def.path }}
+      targetRevision: {{ $def.revision | quote }}
+    {{- else if eq $def.type "local" }}
+    - repoURL: {{ $.Values.gitopsRepoURL }}
+      path: {{ printf "%s/%s/%s" $.Values.appsPath $app ($def.path | default "chart") }}
+      targetRevision: {{ $rev }}
+    {{- else }}
+    {{- fail (printf "%s: chart.yaml type 은 helm · git · local 중 하나여야 합니다" $app) }}
+    {{- end }}
+      helm:
+        releaseName: {{ required (printf "%s: chart.yaml 에 release 가 필요합니다" $app) $def.release }}
+        {{- if $values }}
+        valueFiles:
+          - {{ printf "$values/%s/%s/values.yaml" $.Values.appsPath $app }}
+        {{- end }}
+        {{- if $def.clusterValues }}
+        # 클러스터 값(계정 ID 등). 모르는 키를 거부하는 차트 schema 가 있어 쓰는 앱에만 넘긴다
+        valuesObject:
+          {{- toYaml $.Values.clusterValues | nindent 10 }}
+        {{- end }}
+    # 반드시 마지막 source — argocd-cm 의 Application 헬스 체크가 마지막 source 의 revision 으로 이 커밋 반영 여부를 본다
+    - repoURL: {{ $.Values.gitopsRepoURL }}
+      targetRevision: {{ $rev }}
+      ref: values
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # CRD 가 커서(Traefik · ESO) client-side apply 의 last-applied annotation 크기 제한을 넘는다
+      - ServerSideApply=true
+    retry:
+      {{- toYaml $.Values.syncRetry | nindent 6 }}
+{{- end }}

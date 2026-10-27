@@ -1,0 +1,31 @@
+{{- /*
+하위 앱 전용 AppProject. 앱이 CRD · ClusterRole 을 설치하므로 클러스터 범위 리소스를 막지 않는다
+(지금 agent 의 cluster-admin 과 같은 신뢰 모델 — 읽는 곳은 ruleset 으로 보호된 gitops 레포).
+읽을 수 있는 레포는 앱 정의(chart.yaml)의 repo 와 gitops 레포로 좁힌다.
+root(prod-apps) 자체는 Ansible · Terraform 이 만드는 AppProject bootstrap 에 속한다.
+*/ -}}
+{{- $repos := list .Values.gitopsRepoURL -}}
+{{- range (include "prod-apps.apps" . | fromJson).apps }}
+{{- if .def.repo }}
+{{- $repos = append $repos .def.repo }}
+{{- end }}
+{{- end }}
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: prod
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: 운영 메인 클러스터 앱 (gitops envs/prod/*/chart.yaml)
+  sourceRepos:
+    {{- range $repos | uniq | sortAlpha }}
+    - {{ . }}
+    {{- end }}
+  destinations:
+    - server: {{ .Values.destinationServer }}
+      namespace: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"

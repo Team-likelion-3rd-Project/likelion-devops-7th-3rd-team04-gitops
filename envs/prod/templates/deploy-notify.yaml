@@ -1,0 +1,185 @@
+{{- /*
+배포 결과 알림 (Slack #deploy) — 10-global 배포 토픽에 발행한다. 스크립트는 files/deploy-notify.sh.
+  PostSync hook Job deploy-notify-success : 모든 하위 앱이 이 커밋으로 Healthy 가 된 뒤 → 성공
+  CronJob deploy-notify-watch (1분)        : root sync 가 Failed · Error 로 끝났으면 → 실패 (같은 sync 는 한 번만)
+SyncFail hook 은 쓰지 않는다 — 시간 제한(controller.sync.timeout.seconds) · 사람의 종료로 끝난 sync 에서는 실행되지 않는다
+(2026-10-27 검증). argocd 네임스페이스는 pod-identity-webhook 대상이 아니라(webhook 장애가 ArgoCD 를 막지 않게)
+IRSA 환경 변수를 직접 넣고 토큰(aud sts.amazonaws.com)을 마운트한다.
+*/ -}}
+{{- if include "prod-apps.notifyEnabled" . }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deploy-notify
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+---
+# root · 하위 Application 상태(이전 커밋 · 실패한 앱) 읽기 + 실패 발행 기록(ConfigMap deploy-notify-state)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deploy-notify
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list"]
+  # create 는 이름으로 제한할 수 없다 (RBAC resourceNames 미지원)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["deploy-notify-state"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deploy-notify
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: deploy-notify
+subjects:
+  - kind: ServiceAccount
+    name: deploy-notify
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deploy-notify-script
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+data:
+  deploy-notify.sh: |
+    {{- .Files.Get "files/deploy-notify.sh" | nindent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: deploy-notify-success
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    # 다음 sync 때 지우고 다시 만든다 (그 전까지 로그 확인 가능)
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  {{- include "prod-apps.notifyJobSpec" (dict "root" . "result" "success") | nindent 2 }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: deploy-notify-watch
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 600
+      {{- include "prod-apps.notifyJobSpec" (dict "root" . "result" "failed") | nindent 6 }}
+{{- end }}
+
+{{- define "prod-apps.notifyJobSpec" }}
+{{- $ := .root }}
+{{- $n := $.Values.deployNotify }}
+{{- $account := $.Values.clusterValues.global.awsAccountId | toString }}
+{{- $backend := $.Files.Get "backend/chart.yaml" | fromYaml }}
+{{- $apps := list }}
+{{- range (include "prod-apps.apps" $ | fromJson).apps }}
+{{- $apps = append $apps .name }}
+{{- end -}}
+# 발행 실패는 배포 결과에 영향을 주지 않도록 스크립트가 항상 0 으로 끝난다
+backoffLimit: 0
+activeDeadlineSeconds: 300
+template:
+  spec:
+    serviceAccountName: deploy-notify
+    restartPolicy: Never
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: notify
+        image: {{ $n.image | quote }}
+        command: ["bash", "/opt/deploy-notify/deploy-notify.sh"]
+        env:
+          - name: RESULT
+            value: {{ .result }}
+          - name: ROOT_APP
+            value: {{ $.Release.Name }}
+          - name: ARGOCD_NAMESPACE
+            value: {{ $.Release.Namespace }}
+          - name: GITOPS_REVISION
+            value: {{ include "prod-apps.revision" $ | quote }}
+          # 릴리스 SHA = backend 차트 revision (모노레포 main 커밋, 이미지 태그와 같음)
+          - name: RELEASE
+            value: {{ $backend.revision | default "" | quote }}
+          - name: APPS
+            value: {{ join " " $apps | quote }}
+          - name: DEPLOY_TOPIC_ARN
+            value: {{ printf "arn:aws:sns:%s:%s:%s" $n.region $account $n.topicName | quote }}
+          - name: AWS_ROLE_ARN
+            value: {{ printf "arn:aws:iam::%s:role/%s" $account $n.roleName | quote }}
+          - name: AWS_WEB_IDENTITY_TOKEN_FILE
+            value: /var/run/secrets/sts.amazonaws.com/serviceaccount/token
+          - name: AWS_DEFAULT_REGION
+            value: {{ $n.region | quote }}
+          - name: AWS_STS_REGIONAL_ENDPOINTS
+            value: regional
+          - name: HOME
+            value: /tmp
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+        volumeMounts:
+          - name: script
+            mountPath: /opt/deploy-notify
+            readOnly: true
+          - name: tmp
+            mountPath: /tmp
+          - name: aws-token
+            mountPath: /var/run/secrets/sts.amazonaws.com/serviceaccount
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: deploy-notify-script
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
+      # 70 irsa.tf deploy-notify Role 신뢰 정책(sub system:serviceaccount:argocd:deploy-notify, aud sts.amazonaws.com)
+      - name: aws-token
+        projected:
+          defaultMode: 0444
+          sources:
+            - serviceAccountToken:
+                audience: sts.amazonaws.com
+                expirationSeconds: 3600
+                path: token
+{{- end }}

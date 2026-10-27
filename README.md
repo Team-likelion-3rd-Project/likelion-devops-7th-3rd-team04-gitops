@@ -7,6 +7,7 @@
 
 ```
 envs/prod/              # 원본: 모노레포 infra/gitops/prod (1:1)
+├── Chart.yaml · values.yaml · templates/ · files/   # ArgoCD root 앱 차트 — 앱 정의(chart.yaml) → Application, 배포 결과 알림
 ├── traefik/            # Ingress Controller (워커 NodePort 30080)
 │   ├── chart.yaml      # 앱 정의 — 차트 종류 · 위치 · 버전, namespace, release, order
 │   └── values.yaml
@@ -44,7 +45,7 @@ scripts/validate.sh    # PR 검증 (로컬에서도 실행)
     ├▶ 이미지 10개 빌드 → ECR push (태그 = main 커밋 SHA)
     └▶ 이 레포에 PR 자동 생성 "chore(prod): backend · payment → <sha 8자>" (GitHub App, 브랜치 release/<sha>)
 리뷰(CODEOWNERS) · validate 통과 ─▶ merge ─▶ 배포
-    ├▶ 메인 클러스터: 배포 agent 가 1분 안에 main 을 읽어 적용 (이후: ArgoCD sync)
+    ├▶ 메인 클러스터: ArgoCD root 앱(prod-apps)이 3분 안에 main 을 읽어 sync → Slack #deploy 결과 알림
     └▶ 결제 서버: sync-payment-tag workflow 가 태그를 Parameter Store 에 기록 → 결제 서버 pull agent
 롤백 ─▶ 해당 PR 을 revert 하는 PR
 ```
@@ -77,28 +78,17 @@ scripts/validate.sh    # PR 검증 (로컬에서도 실행)
 
 **Settings → Collaborators and teams**: 팀원 4명(`rbsxo135`, `wkdtpgns5016`, `kimjhn4188-ctrl`, `jack7051105`) 모두 **Write 이상** — CODEOWNERS 는 쓰기 권한이 있는 사람만 소유자로 인정됩니다. 관리자(Admin)는 최소 인원
 
-## ArgoCD 도입 전 / 후
+## 배포 (ArgoCD)
 
-지금은 ArgoCD 도입 전입니다 (dev 와 같은 단계). 이 레포의 **값 형식은 도입 후에도 그대로** 쓰도록 맞춰 두었습니다.
+운영 Main 클러스터는 ArgoCD 가 이 레포 `main` 의 `envs/prod` 를 배포합니다 (모노레포 LDP-166, 이전에는 CronJob `gitops-sync` 배포 agent). 설치 · 동작 · 운영 방법은 모노레포 [`infra/gitops/prod/README.md`](https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team04/blob/develop/infra/gitops/prod/README.md) "배포 (ArgoCD)".
 
-**도입 전 (지금) — 배포 agent**
-- 운영 Main 클러스터의 CronJob `gitops-sync`(1분)가 `main` 의 SHA 가 바뀌면 `envs/prod/*/chart.yaml` 을 `order` 순으로 `helm upgrade --install --atomic` 합니다. 설치 · 동작 · 운영 방법은 모노레포 [`infra/gitops/prod/README.md`](https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team04/blob/develop/infra/gitops/prod/README.md).
-- 앱 정의 `chart.yaml`: `type`(`helm` · `git` · `local`), `repo` · `chart` · `version`(helm), `repo` · `path` · `revision`(git), `path`(local), `namespace`, `release`, `order`, `enabled`, `clusterValues`. `validate` 가 같은 형식으로 앱마다 렌더링합니다.
-- **계정 ID 는 이 레포에 쓰지 않습니다.** `clusterValues: true` 인 앱은 agent 가 클러스터 값(`global.awsAccountId`)을 더 넘기므로 values 에서 `{{ .Values.global.awsAccountId }}` 로 씁니다 (차트가 템플릿을 지원하는 곳, 예: pod-identity-webhook 의 `RoleARN`). `validate` 는 더미 값으로 렌더링합니다.
-- 실패한 SHA(렌더링 오류 · readiness 실패)는 `--atomic` 으로 이전 릴리스를 유지하고 다시 시도하지 않습니다 → **수정 PR 을 merge** 합니다. 차트 다운로드 같은 네트워크 실패는 매 분 재시도합니다.
-- 배포 agent 는 이 레포 하나만 읽습니다(public, 자격 증명 없음). 그래서 main 보호 규칙이 곧 운영 배포 승인입니다.
-- 결제 서버는 `envs/prod/payment/values.yaml` 의 태그로 결제 VPC 의 서버를 갱신합니다 (merge 후 `sync-payment-tag` workflow → SSM Parameter Store → 결제 서버 pull agent).
-
-**도입 시 바꿀 것**
-1. `argocd/root.yaml`(app-of-apps)과 앱 폴더마다 Application 추가 (`chart.yaml` 하나 = Application 하나, `order` → sync-wave). backend 는 multi-source:
-   - source 1: 모노레포 `backend-deploy/charts/backend`, `targetRevision` = `envs/prod/backend/chart.yaml` 의 `revision`
-   - source 2: 이 레포 `main`, `ref: values` → `valueFiles: [$values/envs/prod/backend/values.yaml]`
-   - `destination.namespace: backend`, `syncOptions: [CreateNamespace=false]`
-   - HPA 를 켠 서비스는 `ignoreDifferences` 에 Deployment `/spec/replicas` (2nd 프로젝트에서 HPA 와 selfHeal 이 서로 되돌린 문제)
-2. `chart.yaml` 의 `revision` 을 Application `targetRevision` 으로 옮기고 `chart.yaml` 삭제 (`validate.sh` 도 Application 에서 읽도록 수정)
-3. 배포 agent 제거 — 운영 클러스터 재생성 때 Ansible 이 agent 대신 ArgoCD 를 설치. 이후 배포 = PR merge → ArgoCD sync. 자동 PR 흐름은 그대로
-4. ArgoCD 가 이 레포를 읽을 권한: public 이라 별도 자격증명 불필요
-5. 결제 서버는 EKS 밖이라 ArgoCD 대상이 아님 — 태그 반영 방식(예: merge 시 GitHub Actions → SSM Parameter Store → 결제 서버가 읽음)은 그대로 유지
+- **root 앱 `prod-apps`** 가 `envs/prod` 의 root 차트(`Chart.yaml` · `templates/`)를 렌더링해 앱 폴더(`chart.yaml`)마다 Application 을 만듭니다. `order` 는 sync-wave 이고, 앞 wave 가 Healthy 가 되어야 다음으로 갑니다. 이 레포 소스는 root 와 같은 커밋에 고정되어 **merge 하나 = 배포 하나** 입니다.
+- 앱 정의 `chart.yaml`: `type`(`helm` · `git` · `local`), `repo` · `chart` · `version`(helm), `repo` · `path` · `revision`(git), `path`(local), `namespace`, `release`, `order`, `enabled`, `clusterValues`. `validate` 가 같은 형식으로 앱마다 렌더링하고 root 차트도 렌더링합니다.
+- **계정 ID 는 이 레포에 쓰지 않습니다.** `clusterValues: true` 인 앱은 root 앱이 클러스터 값(`global.awsAccountId`)을 더 넘기므로 values 에서 `{{ .Values.global.awsAccountId }}` 로 씁니다 (차트가 템플릿을 지원하는 곳, 예: pod-identity-webhook 의 `RoleARN`). `validate` 는 더미 값으로 렌더링합니다.
+- **자동 롤백은 없습니다.** 하위 앱은 계속 재시도하고, root sync 가 시간 제한(15분) 안에 끝나지 않으면 `#deploy` 에 실패 알림이 갑니다 → **수정 PR 또는 그 PR 의 revert PR 을 merge** 합니다.
+- ArgoCD 는 이 레포 하나와 `chart.yaml` 의 차트 저장소만 읽습니다(public, 자격 증명 없음). 그래서 main 보호 규칙이 곧 운영 배포 승인입니다.
+- 앱 폴더를 지우면 Application 만 지워지고 클러스터 리소스는 남습니다 (지우는 것은 사람이 함).
+- 결제 서버는 클러스터 밖이라 ArgoCD 대상이 아닙니다. `envs/prod/payment/values.yaml` 의 태그로 결제 VPC 의 서버를 갱신합니다 (merge 후 `sync-payment-tag` workflow → SSM Parameter Store → 결제 서버 pull agent).
 
 ## 알려진 제약 / TODO
 
