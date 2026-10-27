@@ -13,7 +13,7 @@ global:
   imageRegistry: "{{ .Values.global.awsAccountId }}.dkr.ecr.us-east-1.amazonaws.com"
   imageRepositoryPrefix: team04-hotel/
   # 커밋 SHA (latest 금지 — 차트가 렌더링을 거부, ECR 도 IMMUTABLE)
-  imageTag: "d763b95e0aa7ba215046794338c713a126fda8d4" # 릴리스 main 커밋 SHA (GitLab release:gitops-pr)
+  imageTag: "283262c12ddfb772e8da41f5cac34b8e28586543" # 릴리스 main 커밋 SHA (GitLab release:gitops-pr)
   # 워커 kubelet 이 노드 Role 로 ECR pull (ecr-credential-provider, Ansible aws_ecr_credential_provider) → imagePullSecret 불필요
   imagePullSecrets: []
   secretName: backend-secrets
