@@ -3,7 +3,7 @@
 #
 # ⚠️ public 레포로 복사됩니다. 비밀번호 · 키 · 토큰 · 계정 ID 는 넣지 않습니다.
 #    Secret(global.secretName) 은 backend-secrets 앱이 AWS Secrets Manager → External Secrets 로 만듭니다.
-#    계정 ID 는 배포 agent 가 넘기는 {{ .Values.global.awsAccountId }} 로 씁니다 (imageRegistry · services.*.env 는 차트가 tpl 로 렌더링).
+#    계정 ID 는 ArgoCD root 앱이 넘기는 {{ .Values.global.awsAccountId }} 로 씁니다 (imageRegistry · services.*.env 는 차트가 tpl 로 렌더링).
 #
 # global.imageTag 는 릴리스 때 GitLab main 파이프라인이 ECR push 후 여는 PR 로 갱신됩니다 — 사람이 리뷰 · 승인 후 merge.
 # 태그는 main 커밋 SHA 전체(40자)이고 chart.yaml 의 revision 과 같은 값입니다.
@@ -13,7 +13,7 @@ global:
   imageRegistry: "{{ .Values.global.awsAccountId }}.dkr.ecr.us-east-1.amazonaws.com"
   imageRepositoryPrefix: team04-hotel/
   # 커밋 SHA (latest 금지 — 차트가 렌더링을 거부, ECR 도 IMMUTABLE)
-  imageTag: "283262c12ddfb772e8da41f5cac34b8e28586543" # 릴리스 main 커밋 SHA (GitLab release:gitops-pr)
+  imageTag: "70cfa41129f50ab179d34f4f82844ef4d2e8e10a" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
   # 워커 kubelet 이 노드 Role 로 ECR pull (ecr-credential-provider, Ansible aws_ecr_credential_provider) → imagePullSecret 불필요
   imagePullSecrets: []
   secretName: backend-secrets
@@ -34,11 +34,19 @@ services:
     env:
       # 프론트(13-frontend) 출처. 하나만 허용하므로 www 는 CloudFront 에서 루트로 리다이렉트
       CORS_ORIGIN: "https://meomulm.click"
+      # 서비스 간 gRPC 는 Headless Service 로 Pod 주소 목록을 받아 요청마다 분배 (LDP-160, 차트 grpcHeadless · round_robin)
+      # 롤백 = 아래 *_SERVICE_HOST 줄 삭제 → 차트 기본값 <이름>:<포트>(ClusterIP) 로 복귀
+      USER_SERVICE_HOST: "dns:///user-service-headless:3001"
+      HOTEL_SERVICE_HOST: "dns:///hotel-service-headless:3002"
+      BOOKING_SERVICE_HOST: "dns:///booking-service-headless:3003"
+      CHAT_BOT_SERVICE_HOST: "dns:///chat-bot-service-headless:3005"
+      AUTH_SERVICE_HOST: "dns:///auth-service-headless:3006"
       # 결제 서버는 결제 VPC — 메인 VPC 의 PrivateLink 엔드포인트 고정 이름으로 호출 (Terraform 71-payment-link, 재생성해도 같음)
       PAYMENT_SERVICE_HOST: "payment.team04-hotel.internal:3004"
   booking-service:
     replicas: 2
     env:
+      HOTEL_SERVICE_HOST: "dns:///hotel-service-headless:3002" # LDP-160
       # 결제 서버 gRPC (PrivateLink, Terraform 71-payment-link)
       PAYMENT_SERVICE_HOST: "payment.team04-hotel.internal:3004"
       # 결제 결과 이벤트 (SQS FIFO, 43-messaging). SQS_ENDPOINT 비움 = AWS 기본 주소, 자격 증명은 IRSA(team04-hotel-booking-service)
@@ -59,6 +67,9 @@ services:
     env:
       # ElastiCache Valkey 는 전송 암호화 required (41-main-data)
       REDIS_TLS: "true"
+      # LDP-160 (api-gateway 주석 참고)
+      USER_SERVICE_HOST: "dns:///user-service-headless:3001"
+      BOOKING_SERVICE_HOST: "dns:///booking-service-headless:3003"
   chat-bot-service:
     env:
       # DYNAMODB_ENDPOINT 미설정 = AWS 기본 주소, 자격 증명은 IRSA(team04-hotel-chat-bot-service, 두 테이블 PutItem · Query 만)
@@ -96,7 +107,7 @@ migrations:
   # 결제 DB 는 결제 서버 쪽에서 적용 (클러스터에서 결제 DB 에 접근하지 않음)
   payment:
     enabled: false
-# 챗봇 오케스트레이션 워크플로. 이미지는 Docker Hub n8nio/n8n 을 GitLab release:mirror-n8n 이 ECR 로 옮긴 것 (태그 = 차트 n8n.image.tag)
+# 챗봇 오케스트레이션 워크플로. 이미지는 Docker Hub n8nio/n8n 을 release.yml 이 ECR 로 옮긴 것 (amd64, 태그 = 차트 n8n.image.tag)
 # owner 비밀번호(워크플로 활성화용 내부 계정)는 backend-secrets 의 N8N_INIT_OWNER_PASSWORD (41-main-data, 매일 새 값)
 n8n:
   enabled: true
