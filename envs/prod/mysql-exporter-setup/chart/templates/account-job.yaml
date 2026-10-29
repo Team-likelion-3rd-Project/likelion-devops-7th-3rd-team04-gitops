@@ -1,12 +1,10 @@
 {{- /*
-exporter 계정 생성 · 갱신. ArgoCD Sync hook 이라 이 앱을 sync 할 때마다(= gitops 커밋마다) 다시 실행된다.
-재실행 안전: CREATE USER IF NOT EXISTS 뒤 ALTER USER 로 비밀번호 · 제한을 매번 다시 넣는다 (41 이 매일 새 비밀번호를 만든다).
-wave 1 — 같은 sync 의 ExternalSecret(wave 0)이 Healthy(Secret 생성)가 된 뒤 실행된다.
-권한: PROCESS(processlist · InnoDB 상태) · REPLICATION CLIENT(MariaDB 의 BINLOG MONITOR 별칭, binlog 상태) ·
-REPLICA MONITOR(SHOW SLAVE STATUS, exporter slave_status 수집기) · performance_schema 읽기 (온프레미스 db_stack 과 같은 권한).
-RDS master 는 세 권한 모두 GRANT OPTION 이 있다 (2026-10-29 확인).
-performance_schema 는 db.t4g.micro 라 꺼져 있고 exporter 수집기도 끈다 — 나중에 켤 때 권한을 다시 줄 필요가 없게 미리 준다.
-비밀번호는 명령 인자(ps 에 보임)가 아니라 메모리 emptyDir 의 옵션 파일 · stdin 으로 넘긴다 (Secrets Manager 비밀번호는 영숫자만).
+exporter 계정 생성 · 갱신 (스크립트 files/account.sh, 재실행 안전 — 41 이 매일 새 비밀번호를 만든다).
+ArgoCD Sync hook 이라 이 앱이 sync 할 때 실행된다: 클러스터 첫 sync(매일 재생성), 일반 리소스가 바뀐 커밋, 수동 sync.
+hook 은 비교 대상이 아니어서 이 파일만 바뀌면 sync 되지 않는다 → 스크립트 · 설정과 이 Job spec 의 checksum 을
+일반 리소스 ConfigMap(account-script.yaml)에 두어 변경 시 다시 실행되게 한다.
+실패하면 root 의 sync 재시도가 Job 을 새로 만들어 다시 시도한다 (BeforeHookCreation).
+wave 1 — 같은 sync 의 ExternalSecret · ConfigMap(wave 0)이 Healthy 가 된 뒤 실행된다.
 */ -}}
 apiVersion: batch/v1
 kind: Job
@@ -42,41 +40,10 @@ spec:
           envFrom:
             - secretRef:
                 name: {{ .Values.setupSecretName }}
-          env:
-            - name: MAX_USER_CONNECTIONS
-              value: {{ .Values.maxUserConnections | quote }}
-            - name: CA_FILE
-              value: {{ printf "%s/%s" .Values.rdsCaMountPath .Values.rdsCaFile | quote }}
-          command: ["/bin/bash", "-c"]
-          args:
-            - |
-              set -euo pipefail
-              umask 077
-              cat > /work/master.cnf <<CNF
-              [client]
-              host=${MASTER_HOST}
-              port=${MASTER_PORT}
-              user=${MASTER_USER}
-              password=${MASTER_PASSWORD}
-              ssl-ca=${CA_FILE}
-              ssl-verify-server-cert
-              CNF
-              # 'exporter'@'%' — 파드는 워커 노드 IP 로 나가므로(Calico natOutgoing) 호스트를 고정할 수 없다. 접속은 SG M11 이 워커로 제한
-              mariadb --defaults-extra-file=/work/master.cnf <<SQL
-              CREATE USER IF NOT EXISTS '${EXPORTER_USER}'@'%' IDENTIFIED BY '${EXPORTER_PASSWORD}';
-              ALTER USER '${EXPORTER_USER}'@'%' IDENTIFIED BY '${EXPORTER_PASSWORD}' REQUIRE SSL WITH MAX_USER_CONNECTIONS ${MAX_USER_CONNECTIONS};
-              GRANT PROCESS, REPLICATION CLIENT, REPLICA MONITOR ON *.* TO '${EXPORTER_USER}'@'%';
-              GRANT SELECT ON performance_schema.* TO '${EXPORTER_USER}'@'%';
-              SQL
-              # 알람 임계값 · 커넥션 풀 크기 근거 (Terraform 90 db_connections_threshold)
-              mariadb --defaults-extra-file=/work/master.cnf --table <<SQL
-              SELECT @@max_connections AS max_connections, @@performance_schema AS performance_schema,
-                     @@log_output AS log_output, @@log_slow_query AS log_slow_query, @@log_slow_query_time AS log_slow_query_time;
-              SHOW GLOBAL STATUS WHERE Variable_name IN ('Threads_connected', 'Max_used_connections');
-              -- SHOW GRANTS 는 비밀번호 해시를 출력하므로 쓰지 않는다
-              SELECT PRIVILEGE_TYPE FROM information_schema.USER_PRIVILEGES WHERE GRANTEE = "'${EXPORTER_USER}'@'%'";
-              SQL
-              echo "exporter 계정 준비 완료"
+            # MAX_USER_CONNECTIONS · CA_FILE
+            - configMapRef:
+                name: {{ .Values.accountScriptConfigMap }}
+          command: ["/bin/bash", "/scripts/account.sh"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -94,6 +61,9 @@ spec:
             - name: rds-ca
               mountPath: {{ .Values.rdsCaMountPath }}
               readOnly: true
+            - name: script
+              mountPath: /scripts
+              readOnly: true
       volumes:
         - name: work
           emptyDir:
@@ -102,3 +72,6 @@ spec:
         - name: rds-ca
           configMap:
             name: {{ .Values.rdsCaConfigMap }}
+        - name: script
+          configMap:
+            name: {{ .Values.accountScriptConfigMap }}

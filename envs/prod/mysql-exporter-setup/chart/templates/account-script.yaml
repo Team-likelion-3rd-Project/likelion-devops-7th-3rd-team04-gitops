@@ -1,0 +1,18 @@
+{{- /*
+계정 생성 Job 의 스크립트 · 설정. Job 은 Sync hook 이라 ArgoCD 비교 대상이 아니어서, Job 만 바뀐 커밋은 이 앱을 sync 하지 않는다
+(hook 이 다시 실행되지 않음, 2026-10-29 확인). 스크립트 · 설정을 일반 리소스인 이 ConfigMap 에 두고 Job spec 의 checksum 을
+annotation 으로 달아, 어느 쪽이 바뀌어도 앱이 OutOfSync → sync → hook 재실행이 되게 한다.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.accountScriptConfigMap }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    team04.io/account-job-checksum: {{ include (print $.Template.BasePath "/account-job.yaml") . | sha256sum }}
+data:
+  MAX_USER_CONNECTIONS: {{ .Values.maxUserConnections | quote }}
+  CA_FILE: {{ printf "%s/%s" .Values.rdsCaMountPath .Values.rdsCaFile | quote }}
+  account.sh: |-
+    {{- .Files.Get "files/account.sh" | trim | nindent 4 }}

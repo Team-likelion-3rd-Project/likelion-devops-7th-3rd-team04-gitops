@@ -20,6 +20,9 @@ rdsCaConfigMap: rds-ca-bundle
 rdsCaMountPath: /etc/mysql-ca
 rdsCaFile: us-east-1-bundle.pem
 
+# 계정 생성 Job 의 스크립트 · 설정 ConfigMap (templates/account-script.yaml)
+accountScriptConfigMap: mysql-exporter-account-script
+
 # exporter 계정 제한. exporter 는 scrape 마다 연결 1개를 쓴다 (max_connections 30 중)
 maxUserConnections: 3
 
