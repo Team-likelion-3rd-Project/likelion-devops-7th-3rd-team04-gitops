@@ -192,6 +192,27 @@ grafana:
         # AWS SDK 기본 자격 증명 체인 — webhook 이 넣은 AWS_ROLE_ARN · 웹 ID 토큰
         authType: default
         defaultRegion: us-east-1
+    # 결제 서버 · payment-service · 결제 DB 지표 (LDP-181). 결제 서버 Alloy → AMP(Terraform 10-global metrics.tf) 를 조회만 한다.
+    # 메인 Prometheus 는 결제 VPC 를 scrape 할 수 없어(PrivateLink 단방향) 결제 지표는 여기에만 있다 — 메인 지표와 한 쿼리로 묶을 수 없음.
+    # Grafana 13 은 코어 Prometheus 데이터 소스의 SigV4 를 지원하지 않아 전용 플러그인(아래 plugins)을 쓴다.
+    # URL 의 워크스페이스 ID 는 🔒 10-global 이라 매일 재생성해도 같다 (terragrunt output payment_metrics_endpoint, 계정 ID 없음)
+    - name: AMP (payment)
+      type: grafana-amazonprometheus-datasource
+      uid: amp-payment
+      access: proxy
+      editable: false
+      url: https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-82c4f06f-4735-4695-ac2a-7b8111dedcf0/
+      jsonData:
+        httpMethod: POST
+        sigV4Auth: true
+        # IRSA (team04-hotel-grafana 의 amp-read 정책, 이 워크스페이스 조회만)
+        sigV4AuthType: default
+        sigV4Region: us-east-1
+        timeInterval: 30s   # 결제 서버 Alloy 수집 간격 (Terraform 60 metrics_scrape_interval)
+  # AMP 데이터 소스 플러그인. Grafana 시작 때 grafana.com 에서 받는다 (GF_PLUGINS_PREINSTALL_SYNC, 워커 NAT).
+  # 형식 <id>@<버전> — 고정해 재생성마다 같은 플러그인 (3.3.x 는 Grafana >= 12.2.5)
+  plugins:
+    - grafana-amazonprometheus-datasource@3.3.2
   # 대시보드 · 데이터소스는 코드(ConfigMap)로 관리
   persistence:
     enabled: false

@@ -1,0 +1,1072 @@
+{
+  "uid": "team04-payment-prod",
+  "title": "team04 / 결제 (prod)",
+  "description": "운영 결제 VPC 지표 — 결제 서버 Alloy → AMP(Terraform 10-global metrics.tf, 데이터 소스 AMP (payment)). 메인 Prometheus 에는 없음. 온프레미스 team04-payment-node · team04-db 결제 패널을 옮긴 것 (LDP-181)",
+  "tags": [
+    "team04",
+    "payment",
+    "prod"
+  ],
+  "timezone": "",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "결제 서버",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-amazonprometheus-datasource",
+          "uid": "amp-payment"
+        },
+        "query": {
+          "query": "label_values(up{cluster=\"payment\", job=\"node-exporter\"}, instance)",
+          "refId": "instance"
+        },
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "결제 서버 — 호스트 · 컨테이너 (Alloy unix · cadvisor)",
+      "collapsed": false,
+      "id": 1,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "수집 상태 (1 = 정상)",
+      "description": "Alloy 가 수집한 대상별 up. 값이 없으면 노드 또는 Alloy → remote_write 경로를 확인 (알람 PaymentMetricsAbsent · DbNodeMetricsAbsent)",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{cluster=\"payment\", instance=~\"$instance\"}",
+          "legendFormat": "{{instance}} / {{job}}",
+          "instant": true,
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 2,
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "호스트 CPU 사용률",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{cluster=\"payment\", instance=~\"$instance\", mode=\"idle\"}[$__rate_interval])))",
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 3,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 5
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "호스트 메모리 사용률",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes{cluster=\"payment\", instance=~\"$instance\"} / node_memory_MemTotal_bytes{cluster=\"payment\", instance=~\"$instance\"})",
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 5
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "디스크 사용률 (/)",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - node_filesystem_avail_bytes{cluster=\"payment\", instance=~\"$instance\", mountpoint=\"/\"} / node_filesystem_size_bytes{cluster=\"payment\", instance=~\"$instance\", mountpoint=\"/\"})",
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 5
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "컨테이너 CPU (cores)",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance, container) (rate(container_cpu_usage_seconds_total{cluster=\"payment\", instance=~\"$instance\", container!=\"\"}[$__rate_interval]))",
+          "legendFormat": "{{container}} ({{instance}})",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "컨테이너 메모리 (working set)",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance, container) (container_memory_working_set_bytes{cluster=\"payment\", instance=~\"$instance\", container!=\"\"})",
+          "legendFormat": "{{container}} ({{instance}})",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "row",
+      "title": "payment-service — gRPC 서버 (메인에서 받은 호출)",
+      "collapsed": false,
+      "id": 8,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "요청 수",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (rate(rpc_server_duration_seconds_count{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 23
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      },
+      "id": 9
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 지연",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, instance) (rate(rpc_server_duration_seconds_bucket{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"}[$__rate_interval])))",
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 23
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      },
+      "id": 10
+    },
+    {
+      "type": "timeseries",
+      "title": "OK 아닌 응답 비율",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (rate(rpc_server_duration_seconds_count{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\", grpc_code!=\"OK\"}[$__rate_interval])) / sum by (instance) (rate(rpc_server_duration_seconds_count{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 23
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      },
+      "id": 11
+    },
+    {
+      "type": "row",
+      "title": "결제 DB — 서버 (MariaDB RDS, 두 결제 서버가 각자 수집 · instance = 수집한 서버)",
+      "collapsed": false,
+      "id": 12,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "exporter 접속",
+      "description": "0 이면 exporter 가 MariaDB 에 접속하지 못함 (MariaDBDown 알람)",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mysql_up{cluster=\"payment\", job=\"mysql\"}",
+          "legendFormat": "{{instance}}",
+          "instant": true,
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 13,
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 0,
+        "y": 32
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "연결 수 / max_connections",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (instance) (mysql_global_status_threads_connected{cluster=\"payment\", job=\"mysql\"})",
+          "legendFormat": "연결 {{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "max by (instance) (mysql_global_status_threads_running{cluster=\"payment\", job=\"mysql\"})",
+          "legendFormat": "실행 중 {{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "max by (instance) (mysql_global_variables_max_connections{cluster=\"payment\", job=\"mysql\"})",
+          "legendFormat": "max_connections",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "연결이 max 의 80% 를 5분 넘으면 MariaDBConnectionsHigh. 실행 중(threads_running)이 계속 높으면 쿼리가 밀리는 중",
+      "id": 14,
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 4,
+        "y": 32
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "명령별 처리량",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (command) (rate(mysql_global_status_commands_total{cluster=\"payment\", job=\"mysql\", command=~\"select|insert|update|delete|begin|commit|rollback\"}[$__rate_interval]))",
+          "legendFormat": "{{command}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "custom": {
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "fillOpacity": 30
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 15,
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 32
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "느린 쿼리 (long_query_time 초과)",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (rate(mysql_global_status_slow_queries{cluster=\"payment\", job=\"mysql\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "long_query_time(1초)을 넘은 쿼리 수. 내용은 노드의 slow.log",
+      "id": 16,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 40
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "InnoDB buffer pool 적중률",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - sum by (instance) (rate(mysql_global_status_innodb_buffer_pool_reads{cluster=\"payment\", job=\"mysql\"}[$__rate_interval])) / sum by (instance) (rate(mysql_global_status_innodb_buffer_pool_read_requests{cluster=\"payment\", job=\"mysql\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "디스크까지 가지 않고 메모리에서 읽은 비율. 계속 낮으면 buffer pool 이 데이터에 비해 작음",
+      "id": 17,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 40
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "접속 실패 · 끊긴 연결",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (rate(mysql_global_status_aborted_connects{cluster=\"payment\", job=\"mysql\"}[$__rate_interval]))",
+          "legendFormat": "접속 실패 {{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance) (rate(mysql_global_status_aborted_clients{cluster=\"payment\", job=\"mysql\"}[$__rate_interval]))",
+          "legendFormat": "비정상 종료 {{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "접속 실패는 비밀번호 · 권한 · max_connections 초과, 비정상 종료는 앱이 연결을 닫지 않고 끊은 경우",
+      "id": 18,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 40
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "row",
+      "title": "결제 DB — 앱 커넥션 풀 (payment-service db-metrics)",
+      "collapsed": false,
+      "id": 19,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "서비스별 사용 중 / 최대",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service) (db_client_connections{cluster=\"payment\", state=\"used\"})",
+          "legendFormat": "사용 중 {{service}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (service) (db_client_connections_max{cluster=\"payment\"})",
+          "legendFormat": "최대 {{service}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Pod 합계. 사용 중이 최대에 붙어 있으면 풀이 모자람 (아래 대기 요청 · 대기 시간이 함께 오름)",
+      "id": 20,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 49
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "연결 대기 요청 수",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (service, pod) (db_client_connections_pending{cluster=\"payment\"})",
+          "legendFormat": "{{service}} {{pod}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "풀의 연결이 모두 사용 중이라 줄 선 요청. 0 보다 큰 값이 5분 넘게 이어지면 DbPoolWaiting 알람",
+      "id": 21,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 49
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "연결을 받기까지 걸린 시간 p95",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, service) (rate(db_client_connection_wait_duration_seconds_bucket{cluster=\"payment\"}[$__rate_interval])))",
+          "legendFormat": "{{service}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "풀에 연결을 요청하고 받기까지. 쉬는 연결이 있으면 0 에 가까움 — 오르면 풀 크기 · 느린 쿼리 확인",
+      "id": 22,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 57
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "앱 풀 합계 vs max_connections",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(db_client_connections_max{cluster=\"payment\"})",
+          "legendFormat": "앱 풀 최대 합계 (풀 크기 × Pod 수)",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "max(mysql_global_variables_max_connections{cluster=\"payment\", job=\"mysql\"})",
+          "legendFormat": "max_connections",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "레플리카를 늘리면 풀 합계가 늘어남. max_connections 에 가까우면 풀 크기를 줄이거나 max_connections 를 늘림",
+      "id": 23,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 57
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    }
+  ]
+}
