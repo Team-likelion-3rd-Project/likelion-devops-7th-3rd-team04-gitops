@@ -501,7 +501,7 @@
     },
     {
       "type": "row",
-      "title": "결제 DB — 서버 (MariaDB RDS, 두 결제 서버가 각자 수집 · instance = 수집한 서버)",
+      "title": "payment-service — Node.js 런타임 (온프레미스 team04-nodejs-runtime)",
       "collapsed": false,
       "id": 12,
       "gridPos": {
@@ -509,6 +509,429 @@
         "w": 24,
         "x": 0,
         "y": 31
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "이벤트 루프 지연 p99",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (instance) (nodejs_eventloop_lag_p99_seconds{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"})",
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "동기 작업 · CPU 포화로 루프가 막힌 시간. 0.5초를 10분 넘으면 NodeEventLoopLagHigh 알람",
+      "id": 13,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "이벤트 루프 지연 p50",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (instance) (nodejs_eventloop_lag_p50_seconds{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"})",
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 14,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "heap 사용량 / 할당량",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (nodejs_heap_size_used_bytes{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"})",
+          "legendFormat": "used {{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance) (nodejs_heap_size_total_bytes{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"})",
+          "legendFormat": "total {{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "used 가 GC 뒤에도 계속 오르면 heap 누수 의심",
+      "id": 15,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "프로세스 RSS vs heap",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (process_resident_memory_bytes{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"})",
+          "legendFormat": "RSS {{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance) (nodejs_heap_size_used_bytes{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"})",
+          "legendFormat": "heap {{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "RSS 만 오르고 heap 은 그대로면 heap 밖(버퍼 · 네이티브 모듈) 메모리. 컨테이너 기준 메모리는 '서비스 개요'의 working set",
+      "id": 16,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "GC 시간 비율",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance, kind) (rate(nodejs_gc_duration_seconds_sum{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}} {{kind}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "1초 중 GC 에 쓴 시간. major 가 늘면 heap 이 limit 에 가까운 신호",
+      "id": 17,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 49
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "활성 핸들 · 리소스",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (nodejs_active_handles{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"})",
+          "legendFormat": "handles {{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance) (nodejs_active_resources{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"})",
+          "legendFormat": "resources {{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "열린 소켓 · 타이머 수. 트래픽과 상관없이 계속 늘면 연결 · 타이머 누수",
+      "id": 18,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 49
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU (프로세스)",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (rate(process_cpu_seconds_total{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 19,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 57
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "프로세스 재시작 (1시간)",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (changes(process_start_time_seconds{cluster=\"payment\", job=\"payment-service\", instance=~\"$instance\"}[1h]))",
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp-payment"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Pod 재시작과 결제 노드 컨테이너 재시작을 함께 셈",
+      "id": 20,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 57
+      },
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp-payment"
+      }
+    },
+    {
+      "type": "row",
+      "title": "결제 DB — 서버 (MariaDB RDS, 두 결제 서버가 각자 수집 · instance = 수집한 서버)",
+      "collapsed": false,
+      "id": 21,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 65
       },
       "panels": []
     },
@@ -559,12 +982,12 @@
           "values": false
         }
       },
-      "id": 13,
+      "id": 22,
       "gridPos": {
         "h": 8,
         "w": 4,
         "x": 0,
-        "y": 32
+        "y": 66
       },
       "datasource": {
         "type": "grafana-amazonprometheus-datasource",
@@ -625,12 +1048,12 @@
         }
       },
       "description": "연결이 max 의 80% 를 5분 넘으면 MariaDBConnectionsHigh. 실행 중(threads_running)이 계속 높으면 쿼리가 밀리는 중",
-      "id": 14,
+      "id": 23,
       "gridPos": {
         "h": 8,
         "w": 10,
         "x": 4,
-        "y": 32
+        "y": 66
       },
       "datasource": {
         "type": "grafana-amazonprometheus-datasource",
@@ -679,12 +1102,12 @@
           "sort": "desc"
         }
       },
-      "id": 15,
+      "id": 24,
       "gridPos": {
         "h": 8,
         "w": 10,
         "x": 14,
-        "y": 32
+        "y": 66
       },
       "datasource": {
         "type": "grafana-amazonprometheus-datasource",
@@ -727,12 +1150,12 @@
         }
       },
       "description": "long_query_time(1초)을 넘은 쿼리 수. 내용은 노드의 slow.log",
-      "id": 16,
+      "id": 25,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 40
+        "y": 74
       },
       "datasource": {
         "type": "grafana-amazonprometheus-datasource",
@@ -776,12 +1199,12 @@
         }
       },
       "description": "디스크까지 가지 않고 메모리에서 읽은 비율. 계속 낮으면 buffer pool 이 데이터에 비해 작음",
-      "id": 17,
+      "id": 26,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 40
+        "y": 74
       },
       "datasource": {
         "type": "grafana-amazonprometheus-datasource",
@@ -833,12 +1256,12 @@
         }
       },
       "description": "접속 실패는 비밀번호 · 권한 · max_connections 초과, 비정상 종료는 앱이 연결을 닫지 않고 끊은 경우",
-      "id": 18,
+      "id": 27,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 40
+        "y": 74
       },
       "datasource": {
         "type": "grafana-amazonprometheus-datasource",
@@ -849,12 +1272,12 @@
       "type": "row",
       "title": "결제 DB — 앱 커넥션 풀 (payment-service db-metrics)",
       "collapsed": false,
-      "id": 19,
+      "id": 28,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 48
+        "y": 82
       },
       "panels": []
     },
@@ -903,12 +1326,12 @@
         }
       },
       "description": "Pod 합계. 사용 중이 최대에 붙어 있으면 풀이 모자람 (아래 대기 요청 · 대기 시간이 함께 오름)",
-      "id": 20,
+      "id": 29,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 49
+        "y": 83
       },
       "datasource": {
         "type": "grafana-amazonprometheus-datasource",
@@ -951,12 +1374,12 @@
         }
       },
       "description": "풀의 연결이 모두 사용 중이라 줄 선 요청. 0 보다 큰 값이 5분 넘게 이어지면 DbPoolWaiting 알람",
-      "id": 21,
+      "id": 30,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 49
+        "y": 83
       },
       "datasource": {
         "type": "grafana-amazonprometheus-datasource",
@@ -999,12 +1422,12 @@
         }
       },
       "description": "풀에 연결을 요청하고 받기까지. 쉬는 연결이 있으면 0 에 가까움 — 오르면 풀 크기 · 느린 쿼리 확인",
-      "id": 22,
+      "id": 31,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 57
+        "y": 91
       },
       "datasource": {
         "type": "grafana-amazonprometheus-datasource",
@@ -1056,12 +1479,12 @@
         }
       },
       "description": "레플리카를 늘리면 풀 합계가 늘어남. max_connections 에 가까우면 풀 크기를 줄이거나 max_connections 를 늘림",
-      "id": 23,
+      "id": 32,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 57
+        "y": 91
       },
       "datasource": {
         "type": "grafana-amazonprometheus-datasource",
