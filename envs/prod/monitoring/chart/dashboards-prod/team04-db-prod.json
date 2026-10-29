@@ -1,0 +1,1905 @@
+{
+  "uid": "team04-db-prod",
+  "title": "team04 / DB (prod)",
+  "description": "운영 메인 · 결제 RDS, Valkey — mysqld_exporter(메인 RDS, 토글) · backend db-metrics · CloudWatch 지표 · RDS 로그. 온프레미스 team04 / DB 의 운영판 (infra/gitops/prod README 'DB · 캐시 지표', LDP-180)",
+  "tags": [
+    "team04",
+    "db",
+    "prod"
+  ],
+  "timezone": "",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "데이터소스",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "메인 DB — 서버 (RDS team04-hotel-main, mysqld_exporter · 토글)",
+      "collapsed": false,
+      "panels": [],
+      "id": 1,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "exporter 접속",
+      "description": "0 이면 exporter 가 RDS 에 접속하지 못함. No data 면 gitops mysql-exporter · mysql-exporter-setup 앱이 꺼져 있음 (기본 enabled: false)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mysql_up{cluster=\"main\", job=\"mysql\"}",
+          "legendFormat": "{{instance}}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 2,
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "연결 수 / max_connections",
+      "description": "db.t4g.micro max_connections 30. CloudWatch 알람 main-db-connections 는 26 이상. 실행 중(threads_running)이 계속 높으면 쿼리가 밀리는 중",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (instance) (mysql_global_status_threads_connected{cluster=\"main\", job=\"mysql\"})",
+          "legendFormat": "연결 {{instance}}"
+        },
+        {
+          "refId": "B",
+          "expr": "max by (instance) (mysql_global_status_threads_running{cluster=\"main\", job=\"mysql\"})",
+          "legendFormat": "실행 중 {{instance}}"
+        },
+        {
+          "refId": "C",
+          "expr": "max by (instance) (mysql_global_variables_max_connections{cluster=\"main\", job=\"mysql\"})",
+          "legendFormat": "max_connections"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 3,
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 4,
+        "y": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "명령별 처리량",
+      "description": "초당 명령 수 (Com_*)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (command) (rate(mysql_global_status_commands_total{cluster=\"main\", job=\"mysql\", command=~\"select|insert|update|delete|begin|commit|rollback\"}[$__rate_interval]))",
+          "legendFormat": "{{command}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "느린 쿼리 (log_slow_query_time 초과)",
+      "description": "초당 슬로우 쿼리 수. 쿼리 원문은 아래 '슬로우 쿼리 로그'",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (rate(mysql_global_status_slow_queries{cluster=\"main\", job=\"mysql\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 9
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "행 잠금 대기",
+      "description": "InnoDB 행 잠금을 기다린 횟수 · 평균 대기 시간. 교착 상태 원문은 에러 로그 (innodb_print_all_deadlocks)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (rate(mysql_global_status_innodb_row_lock_waits{cluster=\"main\", job=\"mysql\"}[$__rate_interval]))",
+          "legendFormat": "대기/s {{instance}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance) (rate(mysql_global_status_innodb_row_lock_time{cluster=\"main\", job=\"mysql\"}[$__rate_interval])) / clamp_min(sum by (instance) (rate(mysql_global_status_innodb_row_lock_waits{cluster=\"main\", job=\"mysql\"}[$__rate_interval])), 1e-9)",
+          "legendFormat": "평균 대기(ms) {{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 9
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "InnoDB buffer pool 적중률",
+      "description": "디스크 대신 메모리에서 읽은 비율. 낮아지면 버퍼 풀(421 MiB) 부족",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - sum by (instance) (rate(mysql_global_status_innodb_buffer_pool_reads{cluster=\"main\", job=\"mysql\"}[$__rate_interval])) / sum by (instance) (rate(mysql_global_status_innodb_buffer_pool_read_requests{cluster=\"main\", job=\"mysql\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 9
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "접속 실패 · 끊긴 연결",
+      "description": "aborted_connects: 인증 · TLS 실패, aborted_clients: 정상 종료 없이 끊긴 연결",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (rate(mysql_global_status_aborted_connects{cluster=\"main\", job=\"mysql\"}[$__rate_interval]))",
+          "legendFormat": "접속 실패 {{instance}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance) (rate(mysql_global_status_aborted_clients{cluster=\"main\", job=\"mysql\"}[$__rate_interval]))",
+          "legendFormat": "끊긴 연결 {{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 9
+      }
+    },
+    {
+      "type": "row",
+      "title": "RDS 인스턴스 — 메인 · 결제 (CloudWatch AWS/RDS)",
+      "collapsed": false,
+      "panels": [],
+      "id": 9,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU 사용률",
+      "description": "t4g 기준 성능은 vCPU 당 10% 수준. 넘는 동안 크레딧을 씀",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "CPUUtilization",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-main"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Average",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "메인"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "CPUUtilization",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-payment"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Average",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "결제"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 10,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU 크레딧",
+      "description": "잔액(CreditBalance)은 재생성 직후 0 에서 시간당 약 6 씩 쌓임. 빚(SurplusCreditBalance) 10 이상이면 알람 db-cpu-surplus",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "CPUCreditBalance",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-main"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Average",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "메인 잔액"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "CPUCreditBalance",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-payment"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Average",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "결제 잔액"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "CPUSurplusCreditBalance",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-main"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Maximum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "메인 빚"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "CPUSurplusCreditBalance",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-payment"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Maximum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "결제 빚"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 11,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 18
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "연결 수 (DatabaseConnections)",
+      "description": "max_connections 30, 알람 26 이상 (선)",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "DatabaseConnections",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-main"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Maximum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "메인"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "DatabaseConnections",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-payment"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Maximum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "결제"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 26
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 12,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 18
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "여유 메모리 (FreeableMemory)",
+      "description": "평소 110 – 140 MiB (1 GiB 중 버퍼 풀 421 MiB). 64 MiB 미만 15분이면 알람 db-low-memory (선)",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "FreeableMemory",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-main"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Minimum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "메인"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "FreeableMemory",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-payment"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Minimum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "결제"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 67108864
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 13,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 26
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "여유 디스크 (FreeStorageSpace)",
+      "description": "20 GiB 중. 2 GiB 미만이면 알람 db-low-storage (선)",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "FreeStorageSpace",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-main"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Minimum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "메인"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "FreeStorageSpace",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-payment"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Minimum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "결제"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 2147483648
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 14,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 26
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "디스크 지연 (Read · WriteLatency)",
+      "description": "I/O 1건 평균 시간. 버퍼 풀 적중률이 떨어지면 읽기 지연이 같이 오름",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "ReadLatency",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-main"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Average",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "메인 읽기"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "WriteLatency",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-main"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Average",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "메인 쓰기"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "ReadLatency",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-payment"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Average",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "결제 읽기"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/RDS",
+          "metricName": "WriteLatency",
+          "dimensions": {
+            "DBInstanceIdentifier": [
+              "team04-hotel-payment"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Average",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "결제 쓰기"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 15,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 26
+      }
+    },
+    {
+      "type": "row",
+      "title": "메인 DB — 앱 커넥션 풀 (backend db-metrics). 결제 서버 지표는 AMP 라 여기 없음",
+      "collapsed": false,
+      "panels": [],
+      "id": 16,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "서비스별 사용 중 / 최대",
+      "description": "TypeORM 풀. 최대에 붙어 있으면 요청이 연결을 기다림",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service) (db_client_connections{cluster=\"main\", state=\"used\"})",
+          "legendFormat": "사용 중 {{service}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (service) (db_client_connections_max{cluster=\"main\"})",
+          "legendFormat": "최대 {{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 17,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 35
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "연결 대기 요청 수",
+      "description": "풀이 가득 차 연결을 기다리는 요청",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (service, pod) (db_client_connections_pending{cluster=\"main\"})",
+          "legendFormat": "{{service}} {{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 18,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 35
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "연결을 받기까지 걸린 시간 p95",
+      "description": "풀에서 연결을 받기까지 기다린 시간",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, service) (rate(db_client_connection_wait_duration_seconds_bucket{cluster=\"main\"}[$__rate_interval])))",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 19,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 43
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "앱 풀 합계 vs max_connections",
+      "description": "모든 파드 풀 최대의 합이 max_connections(30)를 넘으면 부하 때 새 접속이 거부될 수 있음 (rdsadmin 2 · exporter 1 별도)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(db_client_connections_max{cluster=\"main\"})",
+          "legendFormat": "앱 풀 최대 합계"
+        },
+        {
+          "refId": "B",
+          "expr": "max(mysql_global_variables_max_connections{cluster=\"main\", job=\"mysql\"})",
+          "legendFormat": "max_connections (exporter)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 20,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      }
+    },
+    {
+      "type": "row",
+      "title": "Valkey — team04-hotel-main-001 (CloudWatch AWS/ElastiCache)",
+      "collapsed": false,
+      "panels": [],
+      "id": 21,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "메모리 사용률",
+      "description": "maxmemory 대비. 80% 초과 15분이면 알람 valkey-main-001-memory (선)",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/ElastiCache",
+          "metricName": "DatabaseMemoryUsagePercentage",
+          "dimensions": {
+            "CacheClusterId": [
+              "team04-hotel-main-001"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Maximum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "메모리 %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 22,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 52
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "연결 수",
+      "description": "현재 연결 · 새 연결. 평소 10 미만, 200 초과면 알람 valkey-main-001-connections",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/ElastiCache",
+          "metricName": "CurrConnections",
+          "dimensions": {
+            "CacheClusterId": [
+              "team04-hotel-main-001"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Maximum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "현재"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/ElastiCache",
+          "metricName": "NewConnections",
+          "dimensions": {
+            "CacheClusterId": [
+              "team04-hotel-main-001"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "새 연결"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 23,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 52
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "캐시 적중률",
+      "description": "GET 류 명령 중 키가 있었던 비율",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/ElastiCache",
+          "metricName": "CacheHitRate",
+          "dimensions": {
+            "CacheClusterId": [
+              "team04-hotel-main-001"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Average",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "적중률"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 24,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 52
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "키 축출 · 만료",
+      "description": "축출(Evictions)은 메모리 부족으로 지운 키 — 리프레시 토큰이 사라져 재로그인. 만료(Reclaimed)는 TTL",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/ElastiCache",
+          "metricName": "Evictions",
+          "dimensions": {
+            "CacheClusterId": [
+              "team04-hotel-main-001"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "축출"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/ElastiCache",
+          "metricName": "Reclaimed",
+          "dimensions": {
+            "CacheClusterId": [
+              "team04-hotel-main-001"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "만료"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 25,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 60
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "키 수",
+      "description": "CurrItems",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/ElastiCache",
+          "metricName": "CurrItems",
+          "dimensions": {
+            "CacheClusterId": [
+              "team04-hotel-main-001"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Maximum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "키"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 26,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 60
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "엔진 CPU",
+      "description": "Valkey 는 명령 처리가 단일 스레드라 이 값이 노드 CPU 보다 먼저 포화",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/ElastiCache",
+          "metricName": "EngineCPUUtilization",
+          "dimensions": {
+            "CacheClusterId": [
+              "team04-hotel-main-001"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Average",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "엔진 CPU"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 27,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 60
+      }
+    },
+    {
+      "type": "row",
+      "title": "RDS 로그 — 슬로우 쿼리 · 에러 (CloudWatch Logs, 보관 7일)",
+      "collapsed": false,
+      "panels": [],
+      "id": 28,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 68
+      }
+    },
+    {
+      "type": "logs",
+      "title": "메인 슬로우 쿼리 로그",
+      "description": "log_slow_query_time(기본 1초) 초과 쿼리 원문. Query_time · Lock_time · Rows_examined 를 봄",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Logs",
+          "region": "default",
+          "id": "",
+          "logGroups": [
+            {
+              "arn": "",
+              "name": "/aws/rds/instance/team04-hotel-main/slowquery"
+            }
+          ],
+          "logGroupNames": [
+            "/aws/rds/instance/team04-hotel-main/slowquery"
+          ],
+          "expression": "fields @timestamp, @message, @logStream | sort @timestamp desc | limit 50"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none"
+      },
+      "id": 29,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 69
+      }
+    },
+    {
+      "type": "logs",
+      "title": "결제 슬로우 쿼리 로그",
+      "description": "결제 RDS (Payment VPC 라 exporter 없음 — 로그 · CloudWatch 지표만)",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Logs",
+          "region": "default",
+          "id": "",
+          "logGroups": [
+            {
+              "arn": "",
+              "name": "/aws/rds/instance/team04-hotel-payment/slowquery"
+            }
+          ],
+          "logGroupNames": [
+            "/aws/rds/instance/team04-hotel-payment/slowquery"
+          ],
+          "expression": "fields @timestamp, @message, @logStream | sort @timestamp desc | limit 50"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none"
+      },
+      "id": 30,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 69
+      }
+    },
+    {
+      "type": "logs",
+      "title": "에러 로그 (교착 상태 포함)",
+      "description": "innodb_print_all_deadlocks=1 이라 교착 상태가 전부 기록됨. 메인 · 결제",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Logs",
+          "region": "default",
+          "id": "",
+          "logGroups": [
+            {
+              "arn": "",
+              "name": "/aws/rds/instance/team04-hotel-main/error"
+            },
+            {
+              "arn": "",
+              "name": "/aws/rds/instance/team04-hotel-payment/error"
+            }
+          ],
+          "logGroupNames": [
+            "/aws/rds/instance/team04-hotel-main/error",
+            "/aws/rds/instance/team04-hotel-payment/error"
+          ],
+          "expression": "fields @timestamp, @message, @logStream | sort @timestamp desc | limit 100"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none"
+      },
+      "id": 31,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 77
+      }
+    }
+  ]
+}
