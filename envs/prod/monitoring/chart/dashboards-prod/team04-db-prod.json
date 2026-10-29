@@ -1385,8 +1385,8 @@
     },
     {
       "type": "timeseries",
-      "title": "연결 수",
-      "description": "현재 연결 · 새 연결. 평소 10 미만, 200 초과면 알람 valkey-main-001-connections",
+      "title": "명령 처리량 · 클라이언트",
+      "description": "GET 류 · SET 류 명령 수(그래프 주기당 합계)와 현재 연결 수. 연결은 평소 10 미만, 200 초과면 알람 valkey-main-001-connections",
       "datasource": {
         "type": "cloudwatch",
         "uid": "cloudwatch"
@@ -1394,6 +1394,54 @@
       "targets": [
         {
           "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/ElastiCache",
+          "metricName": "GetTypeCmds",
+          "dimensions": {
+            "CacheClusterId": [
+              "team04-hotel-main-001"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "GET 류 명령"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "region": "default",
+          "namespace": "AWS/ElastiCache",
+          "metricName": "SetTypeCmds",
+          "dimensions": {
+            "CacheClusterId": [
+              "team04-hotel-main-001"
+            ]
+          },
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "",
+          "id": "",
+          "expression": "",
+          "label": "SET 류 명령"
+        },
+        {
+          "refId": "C",
           "datasource": {
             "type": "cloudwatch",
             "uid": "cloudwatch"
@@ -1414,31 +1462,7 @@
           "period": "",
           "id": "",
           "expression": "",
-          "label": "현재"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "cloudwatch",
-            "uid": "cloudwatch"
-          },
-          "queryMode": "Metrics",
-          "metricQueryType": 0,
-          "metricEditorMode": 0,
-          "region": "default",
-          "namespace": "AWS/ElastiCache",
-          "metricName": "NewConnections",
-          "dimensions": {
-            "CacheClusterId": [
-              "team04-hotel-main-001"
-            ]
-          },
-          "matchExact": true,
-          "statistic": "Sum",
-          "period": "",
-          "id": "",
-          "expression": "",
-          "label": "새 연결"
+          "label": "연결"
         }
       ],
       "fieldConfig": {
