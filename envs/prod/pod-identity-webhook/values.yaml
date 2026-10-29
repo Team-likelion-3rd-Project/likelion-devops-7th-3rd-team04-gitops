@@ -39,6 +39,10 @@ config:
       "fluent-bit/fluent-bit":
         RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-fluent-bit"
         Audience: sts.amazonaws.com
+      # Prometheus 알림 (LDP-179). 10-global 알림 토픽 Publish 만. SA 이름은 kube-prometheus-stack values alertmanager.serviceAccount.name
+      "monitoring/kube-prometheus-stack-alertmanager":
+        RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-alertmanager"
+        Audience: sts.amazonaws.com
 
 # 파드 생성마다 호출되므로 워커 2대에 나눠 띄운다
 replicaCount: 2

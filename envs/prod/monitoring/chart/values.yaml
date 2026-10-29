@@ -1,0 +1,16 @@
+# cluster-secret-store 앱의 이름
+clusterSecretStore: aws-secrets-manager
+
+# Grafana admin 계정 (kube-prometheus-stack values grafana.admin.existingSecret).
+# Secrets Manager 값은 Terraform 12-secrets 🔒 가 고정 이름으로 둔다 (사람이 정한 비밀번호라 매일 재생성 스택이 만들지 않음).
+# ESO Role 읽기 권한은 70 의 grafana_admin_secret_name
+grafanaAdmin:
+  secretName: grafana-admin
+  remoteKey: team04-hotel/prod/grafana-admin
+  refreshInterval: 1h
+  data:
+    admin-user: admin_user
+    admin-password: admin_password
+
+# dashboards/*.json → ConfigMap dashboard-<파일 이름> (라벨 grafana_dashboard=1, 온프레미스와 같은 이름 · 라벨)
+dashboardLabel: grafana_dashboard

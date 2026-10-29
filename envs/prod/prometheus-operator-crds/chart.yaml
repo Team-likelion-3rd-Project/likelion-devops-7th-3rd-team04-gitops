@@ -1,0 +1,11 @@
+# Prometheus Operator CRD (PodMonitor · ServiceMonitor · PrometheusRule 등) — kube-prometheus-stack 과 따로 먼저 설치한다.
+# backend 차트의 PodMonitor(order 50)는 CRD 만 있으면 되므로, 관측 스택 본체(order 60)가 Healthy 가 아니어도 서비스 배포가 막히지 않는다.
+# 버전은 kube-prometheus-stack 의 Prometheus Operator 와 같게 맞춘다 (kube-prometheus-stack/chart.yaml, 차트는 crds.enabled: false)
+type: helm
+repo: https://prometheus-community.github.io/helm-charts
+chart: prometheus-operator-crds
+version: "32.0.1"   # Prometheus Operator v0.94.1
+namespace: monitoring
+release: prometheus-operator-crds
+# 다른 앱과 의존이 없어 앞쪽. backend(50) 보다 먼저
+order: 12

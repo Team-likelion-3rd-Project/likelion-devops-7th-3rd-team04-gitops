@@ -1,0 +1,25 @@
+{{- with .Values.grafanaAdmin }}
+# Grafana admin 계정. Secrets Manager 값이 없으면 ExternalSecret 이 Degraded 로 남고 Grafana 파드는 Secret 을 기다린다
+# (backend 는 이미 배포된 뒤라 서비스에는 영향이 없다)
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ .secretName }}
+  labels:
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+spec:
+  refreshInterval: {{ .refreshInterval }}
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ $.Values.clusterSecretStore }}
+  target:
+    name: {{ .secretName }}
+    creationPolicy: Owner
+  data:
+    {{- range $key, $property := .data }}
+    - secretKey: {{ $key }}
+      remoteRef:
+        key: {{ $.Values.grafanaAdmin.remoteKey }}
+        property: {{ $property }}
+    {{- end }}
+{{- end }}

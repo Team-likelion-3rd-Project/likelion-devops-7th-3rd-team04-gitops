@@ -1,0 +1,14 @@
+# kube-prometheus-stack — Prometheus · Alertmanager · Grafana · kube-state-metrics · node-exporter (메인 클러스터 관측, LDP-179).
+# 온프레미스(infra/ansible group_vars/control_plane.yml kube_prometheus_stack_chart_version)와 같은 버전을 쓴다.
+# 메이저를 올릴 때는 prometheus-operator-crds 버전도 같은 Operator 버전으로 올린다 (CRD 는 그 앱이 설치)
+type: helm
+repo: https://prometheus-community.github.io/helm-charts
+chart: kube-prometheus-stack
+version: "92.3.0"   # Prometheus Operator v0.94.1 · Grafana 13.2.3 · kube-state-metrics 2.20.0 · Alertmanager v0.34.1
+namespace: monitoring
+release: kube-prometheus-stack
+# Alertmanager 의 알림 토픽 ARN 계정 ID(global.awsAccountId) 를 클러스터 값으로 받는다 (README "클러스터 값")
+clusterValues: true
+# 맨 마지막 — 관측 스택이 Healthy 가 아니어도 서비스(backend 50)는 이미 배포되어 있다.
+# monitoring(55, Grafana admin Secret · 대시보드) · cert-manager(15, admission webhook 인증서) 다음
+order: 60

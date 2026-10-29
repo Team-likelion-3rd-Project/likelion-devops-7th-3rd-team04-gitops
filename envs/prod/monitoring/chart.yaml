@@ -1,0 +1,8 @@
+# kube-prometheus-stack 이 읽는 리소스 — Grafana admin Secret(ExternalSecret)과 대시보드 ConfigMap (Grafana sidecar 가 읽음).
+# 대시보드 JSON 은 온프레미스 infra/ansible/roles/monitoring/files/dashboards 의 사본 (원본만 고치고 복사, GitHub CI 가 같은지 검사)
+type: local
+path: chart   # 이 폴더 기준
+namespace: monitoring
+release: monitoring
+# backend(50) 다음 — 관측 스택이 준비되지 않아도 서비스 배포는 먼저 끝난다. kube-prometheus-stack(60) 보다 먼저
+order: 55
