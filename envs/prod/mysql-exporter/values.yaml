@@ -23,11 +23,11 @@ extraVolumeMounts:
     mountPath: /etc/mysql-ca
     readOnly: true
 
-# 기본 수집기 중 global_status · global_variables · info_schema.tables 만. 락 대기는 global_status 의
+# 기본 수집기(global_status · global_variables · info_schema.tables · slave_status). 락 대기는 global_status 의
 # Innodb_row_lock_* (mysql_global_status_innodb_row_lock_waits). performance_schema 는 DB 에서 꺼져 있어(1 GiB) 수집기도 끈다.
-# slave_status 는 끈다 — 복제본이 없고, MariaDB 는 SLAVE MONITOR 권한이 필요해(REPLICATION CLIENT 는 BINLOG MONITOR 별칭) scrape 마다 에러
+# slave_status 는 지금 복제본이 없어 비어 있다 — 읽기 복제본을 추가하면 복제 지연을 바로 보려고 켜 둔다
+# (MariaDB 는 REPLICA MONITOR 권한 필요, 계정 생성 Job 이 부여. 온프레미스 db_stack 과 같음)
 collectors:
-  slave_status: false
   perf_schema.eventsstatements: false
   perf_schema.eventswaits: false
   perf_schema.file_events: false
@@ -43,10 +43,14 @@ serviceMonitor:
   enabled: true
   interval: 30s
   scrapeTimeout: 10s
-  # instance 를 파드 IP 대신 RDS 식별자로 — 파드가 바뀌어도 같은 시계열 (Terraform 41 identifier)
+  # instance 를 파드 IP 대신 RDS 식별자로 — 파드가 바뀌어도 같은 시계열 (Terraform 41 identifier).
+  # job 은 온프레미스(Alloy node_collectors)와 같은 mysql — team04-db 대시보드 쿼리와 호환
   relabelings:
     - targetLabel: instance
       replacement: team04-hotel-main
+      action: replace
+    - targetLabel: job
+      replacement: mysql
       action: replace
 
 resources:

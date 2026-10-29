@@ -5,6 +5,7 @@
   type local → 이 레포의 <앱>/<path>
   values     → 이 레포의 <앱>/values.yaml (두 번째 source ref values, root 와 같은 커밋)
   order      → sync-wave. root 는 앞 wave 의 Application 이 Healthy(argocd-cm 헬스 체크: Synced + 이 커밋)가 되어야 다음으로 간다
+  compareOptions → Application annotation argocd.argoproj.io/compare-options (앱별 비교 방식, 없으면 annotation 없음)
 
 Application 에 finalizer 를 달지 않는다 — 앱 폴더를 지우면 Application 만 지워지고 리소스는 남는다 (지우는 것은 사람이 함).
 */ -}}
@@ -23,6 +24,9 @@ metadata:
     team04.io/root-app: {{ $.Release.Name }}
   annotations:
     argocd.argoproj.io/sync-wave: {{ .order | quote }}
+    {{- with $def.compareOptions }}
+    argocd.argoproj.io/compare-options: {{ . | quote }}
+    {{- end }}
 spec:
   project: prod
   destination:

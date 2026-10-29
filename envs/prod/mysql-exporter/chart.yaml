@@ -10,3 +10,6 @@ release: mysql-exporter
 enabled: true   # 검증용 (PR 에서는 false)
 # mysql-exporter-setup(62, 계정 생성 Job) 다음 — 계정이 없으면 mysql_up 0 으로 계속 재시도한다
 order: 65
+# 차트가 memory limit 을 env GOMEMLIMIT(resourceFieldRef, divisor 없음)로 넣는데 API 서버가 divisor: "0" 을 채워
+# 기본 diff 로는 영구 OutOfSync → root 가 이 wave 를 기다리다 시간 제한으로 실패한다 (2026-10-29). API 서버 기준으로 비교
+compareOptions: ServerSideDiff=true

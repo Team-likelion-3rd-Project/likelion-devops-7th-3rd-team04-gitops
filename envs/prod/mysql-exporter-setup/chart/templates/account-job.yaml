@@ -2,7 +2,9 @@
 exporter 계정 생성 · 갱신. ArgoCD Sync hook 이라 이 앱을 sync 할 때마다(= gitops 커밋마다) 다시 실행된다.
 재실행 안전: CREATE USER IF NOT EXISTS 뒤 ALTER USER 로 비밀번호 · 제한을 매번 다시 넣는다 (41 이 매일 새 비밀번호를 만든다).
 wave 1 — 같은 sync 의 ExternalSecret(wave 0)이 Healthy(Secret 생성)가 된 뒤 실행된다.
-권한: PROCESS(processlist · InnoDB 상태) · REPLICATION CLIENT(MariaDB 의 BINLOG MONITOR 별칭, 복제 상태) · performance_schema 읽기.
+권한: PROCESS(processlist · InnoDB 상태) · REPLICATION CLIENT(MariaDB 의 BINLOG MONITOR 별칭, binlog 상태) ·
+REPLICA MONITOR(SHOW SLAVE STATUS, exporter slave_status 수집기) · performance_schema 읽기 (온프레미스 db_stack 과 같은 권한).
+RDS master 는 세 권한 모두 GRANT OPTION 이 있다 (2026-10-29 확인).
 performance_schema 는 db.t4g.micro 라 꺼져 있고 exporter 수집기도 끈다 — 나중에 켤 때 권한을 다시 줄 필요가 없게 미리 준다.
 비밀번호는 명령 인자(ps 에 보임)가 아니라 메모리 emptyDir 의 옵션 파일 · stdin 으로 넘긴다 (Secrets Manager 비밀번호는 영숫자만).
 */ -}}
@@ -63,7 +65,7 @@ spec:
               mariadb --defaults-extra-file=/work/master.cnf <<SQL
               CREATE USER IF NOT EXISTS '${EXPORTER_USER}'@'%' IDENTIFIED BY '${EXPORTER_PASSWORD}';
               ALTER USER '${EXPORTER_USER}'@'%' IDENTIFIED BY '${EXPORTER_PASSWORD}' REQUIRE SSL WITH MAX_USER_CONNECTIONS ${MAX_USER_CONNECTIONS};
-              GRANT PROCESS, REPLICATION CLIENT ON *.* TO '${EXPORTER_USER}'@'%';
+              GRANT PROCESS, REPLICATION CLIENT, REPLICA MONITOR ON *.* TO '${EXPORTER_USER}'@'%';
               GRANT SELECT ON performance_schema.* TO '${EXPORTER_USER}'@'%';
               SQL
               # 알람 임계값 · 커넥션 풀 크기 근거 (Terraform 90 db_connections_threshold)
