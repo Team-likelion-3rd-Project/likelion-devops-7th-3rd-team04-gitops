@@ -1,0 +1,10 @@
+# exporter · 계정 생성 Job 이 RDS 서버 인증서(호스트 이름 포함)를 검증하는 CA 묶음 (backend 네임스페이스의 같은 이름 ConfigMap 사본)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.rdsCaConfigMap }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  {{ .Values.rdsCaFile }}: |-
+    {{- .Files.Get (printf "files/%s" .Values.rdsCaFile) | trim | nindent 4 }}

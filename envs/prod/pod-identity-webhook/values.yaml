@@ -43,6 +43,10 @@ config:
       "monitoring/kube-prometheus-stack-alertmanager":
         RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-alertmanager"
         Audience: sts.amazonaws.com
+      # Grafana CloudWatch 데이터 소스 (LDP-180). 지표 읽기 · 이 프로젝트 로그 그룹 조회만. SA 이름은 kube-prometheus-stack values grafana.serviceAccount.name
+      "monitoring/kube-prometheus-stack-grafana":
+        RoleARN: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/team04-hotel-grafana"
+        Audience: sts.amazonaws.com
 
 # 파드 생성마다 호출되므로 워커 2대에 나눠 띄운다
 replicaCount: 2

@@ -177,6 +177,21 @@ grafana:
     existingSecret: grafana-admin
     userKey: admin-user
     passwordKey: admin-password
+  # CloudWatch 데이터 소스 자격 증명은 IRSA (pod-identity-webhook 매핑 monitoring/kube-prometheus-stack-grafana →
+  # team04-hotel-grafana, 지표 읽기 · 이 프로젝트 로그 그룹 Logs Insights 조회만. Terraform 70 irsa.tf)
+  serviceAccount:
+    name: kube-prometheus-stack-grafana   # IRSA 매핑 · 70 irsa.tf 신뢰 정책 sub 와 같아야 함
+  # RDS(메인 · 결제) · Valkey 지표와 RDS 에러 · 슬로우 쿼리 로그 (LDP-180). 쿼리 수 · 락 대기는 mysql-exporter 앱(Prometheus)
+  additionalDataSources:
+    - name: CloudWatch
+      type: cloudwatch
+      uid: cloudwatch
+      access: proxy
+      editable: false
+      jsonData:
+        # AWS SDK 기본 자격 증명 체인 — webhook 이 넣은 AWS_ROLE_ARN · 웹 ID 토큰
+        authType: default
+        defaultRegion: us-east-1
   # 대시보드 · 데이터소스는 코드(ConfigMap)로 관리
   persistence:
     enabled: false

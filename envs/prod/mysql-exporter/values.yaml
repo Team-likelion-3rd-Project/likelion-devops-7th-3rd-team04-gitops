@@ -1,0 +1,69 @@
+# prometheus-mysql-exporter chart values (prod, LDP-180)
+#
+# ⚠️ public 레포로 복사됩니다. 접속 정보는 mysql-exporter-setup 앱의 my.cnf Secret(ExternalSecret)에만 둡니다.
+# 메인 RDS(db.t4g.micro, max_connections 30)에 scrape 마다 연결 1개 — 계정은 MAX_USER_CONNECTIONS 3 으로 제한.
+
+image:
+  # 태그 변조를 막으려고 digest(멀티 아키텍처 index)로 고정. 차트 appVersion 과 같은 버전
+  tag: "v0.21.0@sha256:afad0c59a154fea24ca5ea0e6f95f2b0b168601b111266963dc8a347715b5318"
+
+# mysql-exporter-setup values 의 configSecretName · configSecretKey (host · port · user · password · ssl-ca)
+mysql:
+  existingConfigSecret:
+    name: mysql-exporter-config
+    key: my.cnf
+
+# RDS CA 묶음 (mysql-exporter-setup 의 ConfigMap). my.cnf 의 ssl-ca 경로와 같아야 한다
+extraVolumes:
+  - name: rds-ca
+    configMap:
+      name: rds-ca-bundle
+extraVolumeMounts:
+  - name: rds-ca
+    mountPath: /etc/mysql-ca
+    readOnly: true
+
+# 기본 수집기 중 global_status · global_variables · info_schema.tables 만. 락 대기는 global_status 의
+# Innodb_row_lock_* (mysql_global_status_innodb_row_lock_waits). performance_schema 는 DB 에서 꺼져 있어(1 GiB) 수집기도 끈다.
+# slave_status 는 끈다 — 복제본이 없고, MariaDB 는 SLAVE MONITOR 권한이 필요해(REPLICATION CLIENT 는 BINLOG MONITOR 별칭) scrape 마다 에러
+collectors:
+  slave_status: false
+  perf_schema.eventsstatements: false
+  perf_schema.eventswaits: false
+  perf_schema.file_events: false
+  perf_schema.file_instances: false
+  perf_schema.indexiowaits: false
+  perf_schema.tableiowaits: false
+  perf_schema.tablelocks: false
+  perf_schema.replication_group_member_stats: false
+
+# ServiceMonitor 로 수집 (kube-prometheus-stack Prometheus 는 release 라벨 없이도 읽음). 차트 기본 prometheus.io annotation 은 쓰지 않는다
+annotations: {}
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  # instance 를 파드 IP 대신 RDS 식별자로 — 파드가 바뀌어도 같은 시계열 (Terraform 41 identifier)
+  relabelings:
+    - targetLabel: instance
+      replacement: team04-hotel-main
+      action: replace
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 64Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]

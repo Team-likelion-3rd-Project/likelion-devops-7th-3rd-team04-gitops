@@ -1,0 +1,30 @@
+# cluster-secret-store 앱의 이름
+clusterSecretStore: aws-secrets-manager
+# 클러스터와 Secret 은 같은 날 같이 재생성되므로 길게 둔다 (backend-secrets 와 같음)
+refreshInterval: 1h
+
+# Secrets Manager 이름 (Terraform 41-main-data secrets.tf)
+remoteKeys:
+  master: team04-hotel/prod/main-db             # {host, port, username, password} — 계정 생성 Job 만 읽는다
+  exporter: team04-hotel/prod/main-db-exporter  # {host, port, username, password}
+
+# 계정 생성 Job 용 Secret (master + exporter). exporter 파드에는 넘기지 않는다
+setupSecretName: mysql-exporter-setup
+# exporter 용 my.cnf Secret — mysql-exporter 앱 values 의 mysql.existingConfigSecret 과 같아야 한다
+configSecretName: mysql-exporter-config
+configSecretKey: my.cnf
+
+# RDS 서버 인증서를 검증하는 CA 묶음 (backend-secrets 의 files/us-east-1-bundle.pem 사본, 공개 인증서).
+# mysql-exporter 앱 values 의 extraVolumes 와 같은 이름 · 경로
+rdsCaConfigMap: rds-ca-bundle
+rdsCaMountPath: /etc/mysql-ca
+rdsCaFile: us-east-1-bundle.pem
+
+# exporter 계정 제한. exporter 는 scrape 마다 연결 1개를 쓴다 (max_connections 30 중)
+maxUserConnections: 3
+
+job:
+  # mariadb 클라이언트. 태그 변조를 막으려고 digest(멀티 아키텍처 index)로 고정. RDS 엔진(11.8)과 같은 메이저 · 마이너
+  image: "docker.io/library/mariadb:11.8.9@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd"
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
