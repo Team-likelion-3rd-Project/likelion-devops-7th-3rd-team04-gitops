@@ -13,7 +13,7 @@ global:
   imageRegistry: "{{ .Values.global.awsAccountId }}.dkr.ecr.us-east-1.amazonaws.com"
   imageRepositoryPrefix: team04-hotel/
   # 커밋 SHA (latest 금지 — 차트가 렌더링을 거부, ECR 도 IMMUTABLE)
-  imageTag: "70cfa41129f50ab179d34f4f82844ef4d2e8e10a" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
+  imageTag: "01d29f02f8d9e67cdead254a2bd14d35c1f28f5c" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
   # 워커 kubelet 이 노드 Role 로 ECR pull (ecr-credential-provider, Ansible aws_ecr_credential_provider) → imagePullSecret 불필요
   imagePullSecrets: []
   secretName: backend-secrets
@@ -28,6 +28,11 @@ ingress:
   host: "api.meomulm.click"
   paths:
     - /api
+# Prometheus 메트릭 (LDP-179) — 서비스마다 METRICS_PORT(9464) + PodMonitor 1개. 수집은 kube-prometheus-stack 앱.
+# 9464 는 containerPort 만이라 Service · Ingress 로 노출되지 않는다. llm-service 는 차트 기본값(metrics: false)으로 빠짐.
+# PodMonitor CRD 는 prometheus-operator-crds 앱(order 12)이 먼저 설치한다
+metrics:
+  enabled: true
 services:
   api-gateway:
     replicas: 2

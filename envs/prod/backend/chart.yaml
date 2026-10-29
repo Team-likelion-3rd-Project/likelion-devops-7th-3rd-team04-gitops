@@ -9,7 +9,7 @@ type: git
 repo: https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team04.git
 path: backend-deploy/charts/backend
 # 릴리스 때 GitHub Actions release.yml 이 main 커밋 SHA 로 채워 gitops 레포에 PR 을 만든다 (모노레포의 0 값은 자리표시)
-revision: "70cfa41129f50ab179d34f4f82844ef4d2e8e10a" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
+revision: "01d29f02f8d9e67cdead254a2bd14d35c1f28f5c" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
 namespace: backend
 release: backend
 # ECR 주소 · SQS 큐 URL 의 계정 ID(global.awsAccountId) 를 클러스터 값으로 받는다 (README "클러스터 값")

@@ -1,0 +1,430 @@
+{
+  "uid": "team04-nodejs-runtime",
+  "title": "team04 / Node.js 런타임",
+  "description": "서비스 프로세스 내부 상태: 이벤트 루프 · heap · GC · 핸들 (prom-client 기본 메트릭, infra/ansible README 17절)",
+  "tags": [
+    "team04"
+  ],
+  "timezone": "",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "데이터소스",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {}
+      },
+      {
+        "name": "cluster",
+        "label": "cluster",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": {
+          "query": "label_values(nodejs_version_info, cluster)",
+          "refId": "cluster"
+        },
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": {}
+      },
+      {
+        "name": "service",
+        "label": "서비스",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": {
+          "query": "label_values(nodejs_version_info{cluster=~\"$cluster\"}, service)",
+          "refId": "service"
+        },
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "이벤트 루프 지연 p99",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (cluster, service, pod) (nodejs_eventloop_lag_p99_seconds{cluster=~\"$cluster\", service=~\"$service\"})",
+          "legendFormat": "{{service}} {{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "동기 작업 · CPU 포화로 루프가 막힌 시간. 0.5초를 10분 넘으면 NodeEventLoopLagHigh 알람",
+      "id": 1,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "이벤트 루프 지연 p50",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (cluster, service, pod) (nodejs_eventloop_lag_p50_seconds{cluster=~\"$cluster\", service=~\"$service\"})",
+          "legendFormat": "{{service}} {{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 2,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "heap 사용량 / 할당량",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (cluster, service, pod) (nodejs_heap_size_used_bytes{cluster=~\"$cluster\", service=~\"$service\"})",
+          "legendFormat": "used {{service}} {{pod}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (cluster, service, pod) (nodejs_heap_size_total_bytes{cluster=~\"$cluster\", service=~\"$service\"})",
+          "legendFormat": "total {{service}} {{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "used 가 GC 뒤에도 계속 오르면 heap 누수 의심",
+      "id": 3,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "프로세스 RSS vs heap",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (cluster, service, pod) (process_resident_memory_bytes{cluster=~\"$cluster\", service=~\"$service\"})",
+          "legendFormat": "RSS {{service}} {{pod}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (cluster, service, pod) (nodejs_heap_size_used_bytes{cluster=~\"$cluster\", service=~\"$service\"})",
+          "legendFormat": "heap {{service}} {{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "RSS 만 오르고 heap 은 그대로면 heap 밖(버퍼 · 네이티브 모듈) 메모리. 컨테이너 기준 메모리는 '서비스 개요'의 working set",
+      "id": 4,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "GC 시간 비율",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (cluster, service, kind) (rate(nodejs_gc_duration_seconds_sum{cluster=~\"$cluster\", service=~\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{service}} {{kind}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "1초 중 GC 에 쓴 시간. major 가 늘면 heap 이 limit 에 가까운 신호",
+      "id": 5,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "활성 핸들 · 리소스",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (cluster, service, pod) (nodejs_active_handles{cluster=~\"$cluster\", service=~\"$service\"})",
+          "legendFormat": "handles {{service}} {{pod}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (cluster, service, pod) (nodejs_active_resources{cluster=~\"$cluster\", service=~\"$service\"})",
+          "legendFormat": "resources {{service}} {{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "열린 소켓 · 타이머 수. 트래픽과 상관없이 계속 늘면 연결 · 타이머 누수",
+      "id": 6,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU (프로세스)",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (cluster, service, pod) (rate(process_cpu_seconds_total{cluster=~\"$cluster\", service=~\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{service}} {{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "프로세스 재시작 (1시간)",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (cluster, service) (changes(process_start_time_seconds{cluster=~\"$cluster\", service=~\"$service\"}[1h]))",
+          "legendFormat": "{{service}} [{{cluster}}]"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Pod 재시작과 결제 노드 컨테이너 재시작을 함께 셈",
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    }
+  ]
+}

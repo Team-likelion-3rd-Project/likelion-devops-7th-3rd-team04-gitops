@@ -1,0 +1,273 @@
+# kube-prometheus-stack chart values (prod, LDP-179)
+#
+# 온프레미스(infra/ansible/roles/monitoring)와 values 를 공유하지 않는다 — 운영은 Alertmanager · 저장소 · 노출 · 결제 지표(AMP)가 달라
+# 이 파일 하나에 전부 둔다. 다만 아래 "알람 규칙"의 team04.* 규칙은 온프레미스 files/kube-prometheus-stack-values-common.yaml 의 사본이다
+# (규칙을 바꿀 때는 양쪽을 같이 고친다). 대시보드 JSON 은 monitoring 앱(사본 검사 있음).
+#
+# ⚠️ public 레포로 복사됩니다. 비밀번호 · 계정 ID 는 넣지 않습니다 (Grafana admin 은 monitoring 앱 ExternalSecret, 계정 ID 는 clusterValues).
+#
+# 배치: 전부 워커 (CP 에는 node-exporter DaemonSet 만). 매일 재생성이라 저장소는 emptyDir — 지표 기록은 보존하지 않는다.
+# 네트워크: Prometheus(워커) → 각 노드 kubelet 10250 · node-exporter 9100 은 Terraform 30-security M8.
+
+# CRD 는 prometheus-operator-crds 앱(order 12)이 먼저 설치 — backend PodMonitor 가 이 앱을 기다리지 않게
+crds:
+  enabled: false
+
+# ── 수집 대상 ─────────────────────────────────────────────
+# kubeadm 컨트롤 플레인 컴포넌트는 127.0.0.1 에만 바인딩해 수집할 수 없고, EKS 전환 후에는 접근할 수 없음 (온프레미스와 같음)
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+defaultRules:
+  rules:
+    etcd: false
+    kubeControllerManager: false
+    kubeProxy: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    windows: false
+
+windowsMonitoring:
+  enabled: false
+
+# ── Prometheus Operator ──────────────────────────────────
+prometheusOperator:
+  # admission webhook 인증서를 cert-manager(order 15)가 발급 — 차트 기본(certgen hook Job)은 ArgoCD 에서 sync 마다 다시 돈다
+  admissionWebhooks:
+    certManager:
+      enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+# 모든 노드(CP 포함, 차트 기본 toleration). hostNetwork 9100
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+# ── Prometheus ───────────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    scrapeInterval: 30s
+    evaluationInterval: 30s
+    # 차트 release 라벨이 없는 ServiceMonitor · PodMonitor · PrometheusRule 도 읽음 (backend 차트의 PodMonitor)
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+    # 모든 수집 대상에 cluster · env 라벨 — 온프레미스 대시보드 · 규칙 쿼리(sum by (cluster))와 호환.
+    # externalLabels 는 저장된 시계열에 붙지 않아(알림에만 붙음) 쿼리에 쓸 수 없으므로 둘 다 둔다
+    scrapeClasses:
+      - name: team04-default
+        default: true
+        relabelings:
+          - targetLabel: cluster
+            replacement: main
+            action: replace
+          - targetLabel: env
+            replacement: prod
+            action: replace
+    externalLabels:
+      cluster: main
+      env: prod
+    # 클러스터가 하루를 넘기지 않음. 시간 · 용량 중 먼저 닿는 쪽으로 지움 (용량은 emptyDir 상한보다 작게)
+    retention: 2d
+    retentionSize: 3GB
+    # 노드 루트 볼륨(30GiB)을 이미지 · 로그와 나눠 씀. 상한을 넘으면 kubelet 이 파드를 축출한다
+    storageSpec:
+      emptyDir:
+        sizeLimit: 5Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 768Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+
+# ── Alertmanager → SNS → AWS Chatbot → Slack #alerts ─────────
+# 10-global 알림 토픽 team04-hotel-alerts (CloudWatch 알람과 같은 채널). 자격 증명은 IRSA
+# (pod-identity-webhook 매핑 monitoring/kube-prometheus-stack-alertmanager → team04-hotel-alertmanager, 토픽 Publish · KMS 만)
+alertmanager:
+  serviceAccount:
+    name: kube-prometheus-stack-alertmanager   # IRSA 매핑 · 70 irsa.tf 신뢰 정책 sub 와 같아야 함
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  # 토픽 ARN 의 계정 ID 를 clusterValues 로 채우려고 config 를 helm tpl 로 렌더링한다.
+  # 그래서 config 안의 Alertmanager 템플릿 중괄호는 {{ "{{" }} 로 감싸야 한다 — 메시지 본문은 아래 templateFiles 에 둠(tpl 대상 아님)
+  tplConfig: true
+  config:
+    route:
+      receiver: sns-alerts
+      # 제목에 알람 이름을 쓰므로 알람 이름으로 묶는다
+      group_by: [alertname, namespace]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      routes:
+        # Watchdog(항상 firing, 파이프라인 확인용) · InfoInhibitor 는 보내지 않음
+        - receiver: "null"
+          matchers:
+            - alertname =~ "Watchdog|InfoInhibitor"
+        # info(CPUThrottlingHigh 등) 는 대시보드 · Prometheus Alerts 화면에서만 봄
+        - receiver: "null"
+          matchers:
+            - severity =~ "info|none"
+    receivers:
+      - name: "null"
+      - name: sns-alerts
+        sns_configs:
+          - topic_arn: 'arn:aws:sns:us-east-1:{{ .Values.global.awsAccountId }}:team04-hotel-alerts'
+            # 키를 두지 않으면 AWS SDK 기본 자격 증명 체인 (IRSA 웹 ID 토큰)
+            sigv4:
+              region: us-east-1
+            send_resolved: true
+            message: '{{ "{{" }} template "team04.chatbot.message" . {{ "}}" }}'
+  # Chatbot 사용자 정의 알림 형식 (10-global alarm_recovered · 배포 알림과 같은 형식). Chatbot 은 이 JSON 이 아니면 버린다.
+  # 동적 값은 toJson 으로 escape 한 뒤 양 끝 따옴표를 뗀다 (기본 규칙 description 에 " 가 들어 있음)
+  templateFiles:
+    chatbot.tmpl: |-
+      {{ define "team04.chatbot.message" -}}
+      {"version":"1.0","source":"custom","content":{"textType":"client-markdown",
+      "title":"{{ if eq .Status "firing" }}:rotating_light: Prometheus 알림{{ else }}:white_check_mark: Prometheus 해소{{ end }} | {{ .CommonLabels.alertname | toJson | reReplaceAll `^"|"$` "" }}",
+      "description":"
+      {{- range .Alerts -}}
+      {{ if eq .Status "firing" }}:red_circle:{{ else }}:large_green_circle:{{ end }} *{{ .Labels.severity | toJson | reReplaceAll `^"|"$` "" }}*
+      {{- with .Labels.namespace }} `{{ . | toJson | reReplaceAll `^"|"$` "" }}`{{ end }}
+      {{- with .Labels.pod }} `{{ . | toJson | reReplaceAll `^"|"$` "" }}`{{ end }}
+      {{- with .Labels.service }} `{{ . | toJson | reReplaceAll `^"|"$` "" }}`{{ end }}\n
+      {{- or .Annotations.summary .Annotations.description | toJson | reReplaceAll `^"|"$` "" }}\n
+      {{- end -}}
+      *클러스터* main (prod) · *시작* {{ (index .Alerts 0).StartsAt.Format "2006-01-02 15:04:05 MST" }}"},
+      "metadata":{"summary":"Prometheus {{ .Status }} | {{ .CommonLabels.alertname | toJson | reReplaceAll `^"|"$` "" }}","eventType":"prometheus_alert"}}
+      {{- end }}
+
+# ── Grafana ──────────────────────────────────────────────
+# https://grafana.<도메인> — ALB(80-main-edge) → Traefik → Grafana. WAF 가 grafana 호스트를 허용 IP(grafana_allowed_cidrs) 외에서 차단
+grafana:
+  # admin 계정은 monitoring 앱의 ExternalSecret (Secrets Manager team04-hotel/prod/grafana-admin, Terraform 12-secrets)
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  # 대시보드 · 데이터소스는 코드(ConfigMap)로 관리
+  persistence:
+    enabled: false
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+  defaultDashboardsTimezone: Asia/Seoul
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - grafana.meomulm.click
+    path: /
+  grafana.ini:
+    server:
+      root_url: https://grafana.meomulm.click
+    # TLS 는 ALB 가 종료 (사용자 ↔ ALB 는 HTTPS 만, 80 은 443 리다이렉트)
+    security:
+      cookie_secure: true
+    # 로그인한 사람만. 가입 · 익명 접근 없음 (차트 기본값을 명시)
+    users:
+      allow_sign_up: false
+    auth.anonymous:
+      enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 192Mi
+    limits:
+      memory: 512Mi
+  # helm test Pod — ArgoCD 는 실행하지 않음
+  testFramework:
+    enabled: false
+
+# ── 알람 규칙 ────────────────────────────────────────────
+# 온프레미스 files/kube-prometheus-stack-values-common.yaml 의 team04.resources · team04.app 사본 (team04.payment-node 는 제외 —
+# 운영 결제 지표는 AMP 로 가서 이 Prometheus 에 없으므로 PaymentMetricsAbsent 가 계속 firing 됨)
+additionalPrometheusRulesMap:
+  team04-resources:
+    groups:
+      - name: team04.resources
+        rules:
+          - alert: PodRestartingFrequently
+            expr: increase(kube_pod_container_status_restarts_total[15m]) >= 3
+            labels:
+              severity: warning
+            annotations:
+              summary: 컨테이너가 15분 동안 3번 이상 재시작
+          - alert: ContainerOOMKilled
+            expr: |
+              kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+              and on (namespace, pod, container)
+              increase(kube_pod_container_status_restarts_total[10m]) > 0
+            labels:
+              severity: warning
+            annotations:
+              summary: 컨테이너가 메모리 limit 을 넘어 OOMKilled 로 재시작
+          - alert: ContainerMemoryNearLimit
+            expr: |
+              max by (namespace, pod, container) (container_memory_working_set_bytes{container!="", container!="POD"})
+              / on (namespace, pod, container)
+              max by (namespace, pod, container) (kube_pod_container_resource_limits{resource="memory"})
+              > 0.9
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: 컨테이너 메모리(working set)가 limit 의 90% 를 5분 넘게 초과
+      # 앱 메트릭 (backend libs/common metrics). 에러 기준은 api-gateway HTTP 5xx 만 — gRPC 코드는 대시보드에서 비율 · 지연만 봄
+      - name: team04.app
+        rules:
+          # 요청이 거의 없을 때(0.1 rps 미만) 한두 건 실패로 울리지 않게 최소 트래픽 조건을 함께 둠
+          - alert: ApiGateway5xxRateHigh
+            expr: |
+              (
+                sum by (cluster) (rate(http_server_request_duration_seconds_count{service="api-gateway", http_status_code=~"5.."}[5m]))
+                / sum by (cluster) (rate(http_server_request_duration_seconds_count{service="api-gateway"}[5m]))
+              ) > 0.05
+              and sum by (cluster) (rate(http_server_request_duration_seconds_count{service="api-gateway"}[5m])) > 0.1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: api-gateway 응답 중 5xx 비율이 5% 를 5분 넘게 초과
+          # 이벤트 루프가 막히면 그 Pod 의 모든 요청이 함께 밀림 (동기 작업 · CPU 포화)
+          - alert: NodeEventLoopLagHigh
+            expr: max by (cluster, service, pod) (nodejs_eventloop_lag_p99_seconds) > 0.5
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: 이벤트 루프 지연 p99 가 0.5초를 10분 넘게 초과

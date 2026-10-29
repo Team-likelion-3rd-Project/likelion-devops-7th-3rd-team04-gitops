@@ -1,0 +1,17 @@
+{{- /*
+dashboards/*.json 하나 = ConfigMap 하나. Grafana sidecar(kube-prometheus-stack grafana.sidecar.dashboards)가 라벨로 찾아 읽는다.
+.Files.Get 은 템플릿으로 해석하지 않으므로 JSON 의 {{instance}} 같은 legendFormat 이 그대로 들어간다
+*/ -}}
+{{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-{{ base $path | trimSuffix ".json" }}
+  labels:
+    {{ $.Values.dashboardLabel }}: "1"
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+data:
+  {{ base $path }}: |-
+    {{- $.Files.Get $path | nindent 4 }}
+{{- end }}

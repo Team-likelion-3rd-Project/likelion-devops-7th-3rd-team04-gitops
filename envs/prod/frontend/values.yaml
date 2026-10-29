@@ -9,7 +9,7 @@
 #
 # ⚠️ public 레포로 복사됩니다. build 에는 브라우저에 그대로 노출되는 공개 값만 넣습니다.
 
-version: "70cfa41129f50ab179d34f4f82844ef4d2e8e10a" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
+version: "01d29f02f8d9e67cdead254a2bd14d35c1f28f5c" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
 # 빌드 때 넣는 Vite 환경 변수. release.yml frontend-build 가 모노레포의 이 파일(infra/gitops/prod/frontend)을 읽어 빌드합니다.
 # 빌드 결과(JS)에 들어가므로 gitops 레포에서 바꿔도 반영되지 않습니다 — 모노레포에서 고친 뒤 새 릴리스로 냅니다.
 build:

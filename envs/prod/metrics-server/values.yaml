@@ -1,0 +1,21 @@
+# metrics-server chart values (prod)
+#
+# 워커(파드) → 각 노드 kubelet 10250 은 Terraform 30-security M8 (워커 · CP 모두)
+
+# kubeadm kubelet 의 serving 인증서는 자체 서명이라 검증을 건너뜀 (serverTLSBootstrap 을 켜지 않음, 온프레미스와 같음)
+args:
+  - --kubelet-insecure-tls
+
+# 노드 InternalIP = VPC 사설 IP. 노드 hostname 은 클러스터 DNS 로 풀리지 않음
+defaultArgs:
+  - --cert-dir=/tmp
+  - --kubelet-preferred-address-types=InternalIP
+  - --kubelet-use-node-status-port
+  - --metric-resolution=15s
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
