@@ -17,7 +17,7 @@ image:
     mock: team04-hotel/pg-mock-service
 # 비밀이 아닌 설정만. 값은 문자열로 넘어갑니다.
 # 인프라가 넣는 값은 여기서 바꿀 수 없습니다 (validate · 결제 서버 agent 가 거부):
-#   PAYMENT_DB_* · TOSS_SECRET_KEY · SQS_* · PAYMENT_RESULT_QUEUE_URL · PG_MOCK_SERVICE_URL · AWS_* · HEALTH_PORT
+#   PAYMENT_DB_* · TOSS_SECRET_KEY · SQS_* · PAYMENT_RESULT_QUEUE_URL · PG_MOCK_SERVICE_URL · AWS_* · HEALTH_PORT · METRICS_PORT
 env:
   NODE_ENV: production
   # TOSS = 토스 테스트 · 실결제 API, MOCK = 결제 VPC 의 pg-mock 인스턴스 (부하 테스트). PR 로 전환

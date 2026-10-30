@@ -124,7 +124,7 @@ fi
 echo "== 2-2) 결제 서버 env"
 # 결제 서버 pull agent(모노레포 60-payment-app templates/payment-deploy.sh)와 같은 규칙. merge 전에 막는다
 payment_values="$ENV_DIR/payment/values.yaml"
-reserved='^(PAYMENT_DB_.*|TOSS_SECRET_KEY|SQS_.*|PAYMENT_RESULT_QUEUE_URL|PG_MOCK_SERVICE_URL|AWS_.*|HEALTH_PORT)$'
+reserved='^(PAYMENT_DB_.*|TOSS_SECRET_KEY|SQS_.*|PAYMENT_RESULT_QUEUE_URL|PG_MOCK_SERVICE_URL|AWS_.*|HEALTH_PORT|METRICS_PORT)$'
 while IFS= read -r key; do
   [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || fail "payment/values.yaml env 키는 대문자 · 숫자 · _ 만 씁니다: $key"
   [[ "$key" =~ $reserved ]] && fail "payment/values.yaml env.$key 는 인프라(Terraform · Secrets Manager)가 넣는 값이라 쓸 수 없습니다"
