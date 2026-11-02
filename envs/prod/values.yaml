@@ -13,6 +13,13 @@ gitopsRevision: ""
 # public 레포에 둘 수 없는 클러스터 값만 둔다. 예: {global: {awsAccountId: "123456789012"}}
 clusterValues: {}
 
+# 이 root 가 도는 클러스터 (kubeadm · eks). 70 Ansible 은 기본값, 72 Terraform 은 eks 를 넘긴다.
+# chart.yaml clusters 로 앱을 고르고, <앱>/values-<cluster>.yaml 을 더한다
+cluster: kubeadm
+
+# 앱 하나에만 넘기는 클러스터 값 (Git 에 두지 않는 값, 예: 매일 바뀌는 VPC ID). 72 Terraform 이 넘긴다. {<앱>: {<값>}}
+appValues: {}
+
 destinationServer: https://kubernetes.default.svc
 
 # 하위 앱 자동 sync 재시도. 자동 롤백은 없다 — 무제한 재시도(limit < 0)로 순서 의존(CRD · webhook · Secret)을 기다리고,
@@ -27,9 +34,11 @@ syncRetry:
 # 배포 결과 알림 (Slack #deploy). root PostSync(성공) · SyncFail(실패) hook Job 이 10-global 배포 토픽에 발행한다.
 # clusterValues.global.awsAccountId 가 없으면(로컬 렌더링) 만들지 않는다. 이름은 Terraform 과 같아야 한다
 deployNotify:
+  # 두 클러스터 병행 기간에는 한쪽(70)만 발행한다 — 72 enable_deploy_notify
+  enabled: true
   region: us-east-1
   topicName: team04-hotel-deploy      # 10-global deploy_topic_name
-  roleName: team04-hotel-deploy-notify # 70 irsa.tf deploy-notify (신뢰 sub system:serviceaccount:argocd:deploy-notify)
+  roleName: team04-hotel-deploy-notify # 51-pod-roles deploy-notify (신뢰 sub system:serviceaccount:argocd:deploy-notify)
   # kubectl · jq · aws(v1) 포함. 태그 변조를 막으려고 digest(멀티 아키텍처 index)로 고정.
   # kubectl 은 클러스터 버전(1.35)과 마이너 ±1 안에서 맞춘다. 올릴 때: docker buildx imagetools inspect alpine/k8s:<버전>
   image: "docker.io/alpine/k8s:1.35.9@sha256:b9cb6db0091a2327c0a56ecda69d37fa830c7a96ea669e7382b3ee778aa07a24"

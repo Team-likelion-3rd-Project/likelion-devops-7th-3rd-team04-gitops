@@ -1,8 +1,11 @@
 {{- /*
 dashboards/*.json 하나 = ConfigMap 하나. Grafana sidecar(kube-prometheus-stack grafana.sidecar.dashboards)가 라벨로 찾아 읽는다.
 .Files.Get 은 템플릿으로 해석하지 않으므로 JSON 의 {{instance}} 같은 legendFormat 이 그대로 들어간다
+  dashboards/       온프레미스 files/dashboards 의 사본 (GitHub CI 가 같은지 검사)
+  dashboards-prod/  운영 전용 (CloudWatch 데이터 소스 등, 사본 검사 대상 아님)
 */ -}}
-{{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
+{{- range $glob := list "dashboards/*.json" "dashboards-prod/*.json" }}
+{{- range $path, $_ := $.Files.Glob $glob }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -14,4 +17,5 @@ metadata:
 data:
   {{ base $path }}: |-
     {{- $.Files.Get $path | nindent 4 }}
+{{- end }}
 {{- end }}

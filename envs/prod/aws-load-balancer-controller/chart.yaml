@@ -1,0 +1,11 @@
+# AWS Load Balancer Controller — TargetGroupBinding 만 쓴다 (Traefik 파드 IP 를 80-main-edge eks Target Group 에 등록).
+# ALB · 리스너 · SG 는 Terraform 80 · 30 이 관리한다. AWS 권한은 Pod Identity (72, eks Target Group 태그로 제한)
+type: helm
+repo: https://aws.github.io/eks-charts
+chart: aws-load-balancer-controller
+version: "3.6.2"   # controller v3.6.2
+namespace: aws-load-balancer-controller
+release: aws-load-balancer-controller
+clusters: [eks]
+# webhook 인증서를 cert-manager(15) 로 발급한다. traefik-target-group 보다 먼저
+order: 18

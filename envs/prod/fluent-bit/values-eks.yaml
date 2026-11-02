@@ -1,0 +1,12 @@
+# aws-for-fluent-bit values — 72 EKS 만. 같은 로그 그룹 · 버킷에 쓰므로 레코드 cluster 필드로 구분한다.
+# additionalFilters 는 통째로 덮어써서 values.yaml 의 Lua 필터를 함께 적는다 — 같이 고친다
+additionalFilters: |
+  [FILTER]
+      Name    lua
+      Match   kube.*
+      call    set_log_group
+      code    local known = {["kube-system"]=true, ["tigera-operator"]=true, ["calico-system"]=true, ["calico-apiserver"]=true, ["argocd"]=true, ["traefik"]=true, ["cert-manager"]=true, ["pod-identity-webhook"]=true, ["fluent-bit"]=true, ["whoami"]=true, ["external-secrets"]=true, ["backend"]=true} function set_log_group(tag, ts, record) local k = record["kubernetes"] local ns = k and k["namespace_name"] if not (ns and known[ns]) then ns = "other" end record["log_group_ns"] = ns return 2, ts, record end
+  [FILTER]
+      Name    modify
+      Match   kube.*
+      Add     cluster eks

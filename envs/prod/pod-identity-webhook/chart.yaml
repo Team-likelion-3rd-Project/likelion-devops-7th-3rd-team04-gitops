@@ -1,6 +1,6 @@
 # amazon-eks-pod-identity-webhook — kubeadm 클러스터의 자체 IRSA.
 # 아래 values 의 ServiceAccount 로 뜨는 파드에 AWS_ROLE_ARN · 웹 ID 토큰(aud sts.amazonaws.com)을 주입한다.
-# 발급자(OIDC) · keys.json 은 Terraform 10-global · Ansible, IAM Role 은 Terraform 70 irsa.tf
+# 발급자(OIDC) · keys.json 은 Terraform 10-global · Ansible, IAM Role 은 Terraform 51-pod-roles
 type: helm
 repo: https://jkroepke.github.io/helm-charts
 chart: amazon-eks-pod-identity-webhook
@@ -11,3 +11,5 @@ release: pod-identity-webhook
 clusterValues: true
 # cert-manager 다음, IRSA 를 쓰는 앱(external-secrets 등) 보다 먼저
 order: 20
+# EKS 는 Pod Identity(72)를 쓴다
+clusters: [kubeadm]

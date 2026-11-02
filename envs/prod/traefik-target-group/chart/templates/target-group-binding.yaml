@@ -1,0 +1,12 @@
+# networking 을 두지 않는다 — SG 규칙은 30-security M16 에서만 관리한다
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: traefik
+  namespace: {{ .Release.Namespace }}
+spec:
+  targetGroupName: {{ .Values.targetGroupName }}
+  targetType: ip
+  serviceRef:
+    name: {{ .Values.serviceName }}
+    port: {{ .Values.servicePort }}

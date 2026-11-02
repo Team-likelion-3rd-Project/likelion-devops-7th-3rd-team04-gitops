@@ -65,6 +65,13 @@ prometheus-node-exporter:
       memory: 32Mi
     limits:
       memory: 128Mi
+  # instance 는 노드 IP:9100 이라 kube-state-metrics(kube_node_role 의 node)와 맞출 노드 이름 라벨을 붙인다 (team04.nodes 규칙)
+  prometheus:
+    monitor:
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+          action: replace
 
 # ── Prometheus ───────────────────────────────────────────
 prometheus:
@@ -112,7 +119,7 @@ prometheus:
 # (pod-identity-webhook 매핑 monitoring/kube-prometheus-stack-alertmanager → team04-hotel-alertmanager, 토픽 Publish · KMS 만)
 alertmanager:
   serviceAccount:
-    name: kube-prometheus-stack-alertmanager   # IRSA 매핑 · 70 irsa.tf 신뢰 정책 sub 와 같아야 함
+    name: kube-prometheus-stack-alertmanager   # IRSA 매핑 · 51-pod-roles 신뢰 정책 sub 와 같아야 함
   alertmanagerSpec:
     resources:
       requests:
@@ -177,6 +184,42 @@ grafana:
     existingSecret: grafana-admin
     userKey: admin-user
     passwordKey: admin-password
+  # CloudWatch 데이터 소스 자격 증명은 IRSA (pod-identity-webhook 매핑 monitoring/kube-prometheus-stack-grafana →
+  # team04-hotel-grafana, 지표 읽기 · 이 프로젝트 로그 그룹 Logs Insights 조회만. Terraform 51-pod-roles)
+  serviceAccount:
+    name: kube-prometheus-stack-grafana   # IRSA 매핑 · 51-pod-roles 신뢰 정책 sub 와 같아야 함
+  # RDS(메인 · 결제) · Valkey 지표와 RDS 에러 · 슬로우 쿼리 로그 (LDP-180). 쿼리 수 · 락 대기는 mysql-exporter 앱(Prometheus)
+  additionalDataSources:
+    - name: CloudWatch
+      type: cloudwatch
+      uid: cloudwatch
+      access: proxy
+      editable: false
+      jsonData:
+        # AWS SDK 기본 자격 증명 체인 — webhook 이 넣은 AWS_ROLE_ARN · 웹 ID 토큰
+        authType: default
+        defaultRegion: us-east-1
+    # 결제 서버 · payment-service · 결제 DB 지표 (LDP-181). 결제 서버 Alloy → AMP(Terraform 10-global metrics.tf) 를 조회만 한다.
+    # 메인 Prometheus 는 결제 VPC 를 scrape 할 수 없어(PrivateLink 단방향) 결제 지표는 여기에만 있다 — 메인 지표와 한 쿼리로 묶을 수 없음.
+    # Grafana 13 은 코어 Prometheus 데이터 소스의 SigV4 를 지원하지 않아 전용 플러그인(아래 plugins)을 쓴다.
+    # URL 의 워크스페이스 ID 는 🔒 10-global 이라 매일 재생성해도 같다 (terragrunt output payment_metrics_endpoint, 계정 ID 없음)
+    - name: AMP (payment)
+      type: grafana-amazonprometheus-datasource
+      uid: amp-payment
+      access: proxy
+      editable: false
+      url: https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-82c4f06f-4735-4695-ac2a-7b8111dedcf0/
+      jsonData:
+        httpMethod: POST
+        sigV4Auth: true
+        # IRSA (team04-hotel-grafana 의 amp-read 정책, 이 워크스페이스 조회만)
+        sigV4AuthType: default
+        sigV4Region: us-east-1
+        timeInterval: 30s   # 결제 서버 Alloy 수집 간격 (Terraform 60 metrics_scrape_interval)
+  # AMP 데이터 소스 플러그인. Grafana 시작 때 grafana.com 에서 받는다 (GF_PLUGINS_PREINSTALL_SYNC, 워커 NAT).
+  # 형식 <id>@<버전> — 고정해 재생성마다 같은 플러그인 (3.3.x 는 Grafana >= 12.2.5)
+  plugins:
+    - grafana-amazonprometheus-datasource@3.3.2
   # 대시보드 · 데이터소스는 코드(ConfigMap)로 관리
   persistence:
     enabled: false
@@ -271,3 +314,23 @@ additionalPrometheusRulesMap:
               severity: warning
             annotations:
               summary: 이벤트 루프 지연 p99 가 0.5초를 10분 넘게 초과
+  # 운영 전용 (온프레미스 사본 아님, LDP-200). 워커가 t3a unlimited 로 계속 버틸 만한지 — kubeadm · EKS 공통.
+  # 기준 41% 는 t3a.large 초과 크레딧 요금을 더하면 m6a.large 보다 비싸지는 평균 사용률(근사치).
+  # CP 는 kube_node_role control-plane 으로 뺀다 (EKS 는 CP 노드가 없어 그대로 워커 전부).
+  # 크레딧 과금 자체는 Terraform 90 ec2-cpu-surplus-charged (CloudWatch) 가 본다. Prometheus 가 멈추면 이 알람도 없다
+  team04-nodes:
+    groups:
+      - name: team04.nodes
+        rules:
+          - alert: WorkerCpuAboveT3aBreakEven
+            expr: |
+              avg by (cluster) (
+                1 - avg by (cluster, node) (rate(node_cpu_seconds_total{mode="idle"}[3h]))
+                unless on (node) kube_node_role{role="control-plane"}
+              ) > 0.41
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: 워커 평균 CPU(3시간)가 41% 를 넘음 — t3a unlimited 보다 m6a 가 싸질 수 있음
+              description: 'Grafana 노드 대시보드 · Terraform 90 ec2-cpu-surplus-charged 확인. 계속되면 워커 인스턴스 타입(70 worker_instance_type · 72 MNG) 검토. 현재 {{ $value | humanizePercentage }}'

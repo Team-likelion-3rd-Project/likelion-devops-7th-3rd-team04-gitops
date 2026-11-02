@@ -1,0 +1,16 @@
+# backend values — 72 EKS 만 (values.yaml 위에 더한다).
+#
+# 두 클러스터가 같은 RDS · 버킷 · 벡터 인덱스를 쓰므로 한 번만 돌아야 하는 작업은 병행 기간 동안 70 에서만 실행한다.
+# 가중치를 옮길 때(LDP-202) 이 파일에서 켠다.
+migrations:
+  main:
+    enabled: false
+llmIngest:
+  enabled: false
+seed:
+  enabled: false
+
+# EKS 는 발급자를 고정할 수 없어 AWS Provider 로 교환한다 (Terraform 14-gcp-llm, 파드의 Pod Identity 자격 증명 → STS → impersonate)
+gcpWorkloadIdentity:
+  provider: aws
+  audience: "//iam.googleapis.com/projects/1066485667715/locations/global/workloadIdentityPools/team04-hotel-prod/providers/main-cluster-aws"

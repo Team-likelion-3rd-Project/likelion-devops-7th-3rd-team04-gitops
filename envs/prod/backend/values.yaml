@@ -17,9 +17,11 @@ global:
   # 워커 kubelet 이 노드 Role 로 ECR pull (ecr-credential-provider, Ansible aws_ecr_credential_provider) → imagePullSecret 불필요
   imagePullSecrets: []
   secretName: backend-secrets
+
 # 서비스별 SA — IRSA 매핑(pod-identity-webhook values)이 backend/<서비스 이름> 기준
 serviceAccounts:
   create: true
+
 # api-gateway 외부 노출: ALB(Terraform 80-main-edge) → 워커 NodePort 30080 → Traefik → api-gateway
 ingress:
   enabled: true
@@ -28,11 +30,13 @@ ingress:
   host: "api.meomulm.click"
   paths:
     - /api
+
 # Prometheus 메트릭 (LDP-179) — 서비스마다 METRICS_PORT(9464) + PodMonitor 1개. 수집은 kube-prometheus-stack 앱.
 # 9464 는 containerPort 만이라 Service · Ingress 로 노출되지 않는다. llm-service 는 차트 기본값(metrics: false)으로 빠짐.
 # PodMonitor CRD 는 prometheus-operator-crds 앱(order 12)이 먼저 설치한다
 metrics:
   enabled: true
+
 services:
   api-gateway:
     replicas: 2
@@ -51,7 +55,7 @@ services:
   booking-service:
     replicas: 2
     env:
-      HOTEL_SERVICE_HOST: "dns:///hotel-service-headless:3002" # LDP-160
+      HOTEL_SERVICE_HOST: "dns:///hotel-service-headless:3002"   # LDP-160
       # 결제 서버 gRPC (PrivateLink, Terraform 71-payment-link)
       PAYMENT_SERVICE_HOST: "payment.team04-hotel.internal:3004"
       # 결제 결과 이벤트 (SQS FIFO, 43-messaging). SQS_ENDPOINT 비움 = AWS 기본 주소, 자격 증명은 IRSA(team04-hotel-booking-service)
@@ -100,6 +104,7 @@ services:
   # prod 는 실제 PG(토스)를 결제 서버가 직접 호출 → 목업 불필요
   pg-mock-service:
     enabled: false
+
 migrations:
   # 메인 DB(RDS, 41-main-data) — 배포 직전 hook 으로 Flyway 적용. RDS 서버 인증서를 검증하는 TLS 로 접속
   # Flyway 이미지의 드라이버는 MariaDB Connector/J 2.x 라 3.x 옵션 sslMode 는 무시되고 평문으로 붙는다.
@@ -108,24 +113,28 @@ migrations:
     enabled: true
     db:
       jdbcParams: "useSsl=true&serverSslCert=/flyway/certs/us-east-1-bundle.pem"
-      caConfigMap: rds-ca-bundle # backend-secrets 앱
+      caConfigMap: rds-ca-bundle   # backend-secrets 앱
   # 결제 DB 는 결제 서버 쪽에서 적용 (클러스터에서 결제 DB 에 접근하지 않음)
   payment:
     enabled: false
+
 # 챗봇 오케스트레이션 워크플로. 이미지는 Docker Hub n8nio/n8n 을 release.yml 이 ECR 로 옮긴 것 (amd64, 태그 = 차트 n8n.image.tag)
 # owner 비밀번호(워크플로 활성화용 내부 계정)는 backend-secrets 의 N8N_INIT_OWNER_PASSWORD (41-main-data, 매일 새 값)
 n8n:
   enabled: true
+
 # GCP Workload Identity Federation (Terraform 14-gcp-llm 🔒 output, 모두 공개 값 — 키 없음)
 #   llm-service · llm-ingest 파드 projected 토큰 → STS → llm-service-prod impersonate → Vertex AI
 gcpWorkloadIdentity:
   enabled: true
   audience: "//iam.googleapis.com/projects/1066485667715/locations/global/workloadIdentityPools/team04-hotel-prod/providers/main-cluster"
   serviceAccountEmail: llm-service-prod@likelion-devops-7th-3rd-team4.iam.gserviceaccount.com
+
 # RAG 문서 적재 Job — 릴리스마다 llm-service 이미지의 문서(app/corpus.py)를 임베딩해 15-chatbot-vectors 인덱스에 넣는다.
 # 문서 id 가 key 라 중복되지 않는다. 자격 증명은 IRSA(team04-hotel-llm-ingest, 쓰기만) + GCP Workload Identity
 llmIngest:
   enabled: true
+
 # 초기 데이터 시딩 Job (LDP-141) — 메인 DB 를 매일 새로 만들므로 배포마다 호텔 · 객실 · 재고 · 관리자 계정 · 객실 사진을 채운다.
 # 마이그레이션 hook 뒤에 실행되는 일반 Job 이라 실패해도 서비스 배포는 롤백되지 않는다. 이미지 태그는 global.imageTag 와 같음
 seed:
@@ -139,4 +148,4 @@ seed:
   adminSecretName: seed-admin
   db:
     # RDS 서버 인증서 · 호스트 이름 검증 TLS (require_secure_transport 를 켜도 접속됨)
-    caConfigMap: rds-ca-bundle # backend-secrets 앱
+    caConfigMap: rds-ca-bundle   # backend-secrets 앱
