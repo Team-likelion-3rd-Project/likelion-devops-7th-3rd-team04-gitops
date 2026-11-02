@@ -162,6 +162,8 @@ for dir in "${APPS[@]}"; do
   values=()
   [[ -f "$dir/values.yaml" ]] && values=(-f "$dir/values.yaml")
   [[ "$(field "$dir" '.clusterValues')" == "true" ]] && values+=(-f "$WORK/cluster-values.yaml")
+  # 앱 전용 클러스터 값 (root appValues, 72 Terraform 이 넘김)
+  [[ "$app" == "aws-load-balancer-controller" ]] && values+=(--set vpcId=vpc-00000000000000000)
   case "$(field "$dir" '.type')" in
     helm)
       chart="$(field "$dir" '.chart')"
@@ -182,18 +184,32 @@ for dir in "${APPS[@]}"; do
   helm template "$(field "$dir" '.release')" "${src[@]}" -n "$(field "$dir" '.namespace')" \
     "${values[@]}" > "$WORK/rendered/$app.yaml"
   echo "OK $app $(grep -c '^kind:' "$WORK/rendered/$app.yaml") 개 리소스"
+  # <앱>/values-<cluster>.yaml 도 같은 차트로 렌더링 (values.yaml 위에 더함)
+  for extra in "$dir"/values-*.yaml; do
+    [[ -f "$extra" ]] || continue
+    name="$(basename "$extra" .yaml)"
+    helm template "$(field "$dir" '.release')" "${src[@]}" -n "$(field "$dir" '.namespace')" \
+      "${values[@]}" -f "$extra" > "$WORK/rendered/$app-$name.yaml"
+    echo "OK $app ($name) $(grep -c '^kind:' "$WORK/rendered/$app-$name.yaml") 개 리소스"
+  done
 done
 
 echo "== 3-1) root 앱 차트 (ArgoCD prod-apps)"
 # root 차트(envs/prod/Chart.yaml · templates/)가 앱 정의를 Application 으로 바꾸는지. 클러스터 값 · 커밋은 더미
 if [[ -f "$ENV_DIR/Chart.yaml" ]]; then
-  helm template prod-apps "$ENV_DIR" -n argocd --set-string gitopsRevision=0000000000000000000000000000000000000000 \
-    --set-json "clusterValues=$(cat "$WORK/cluster-values.yaml")" > "$WORK/rendered/_root.yaml"
-  want=0
-  for dir in "${APPS[@]}"; do enabled "$dir" && want=$((want + 1)); done
-  got="$(yq ea '[select(.kind == "Application")] | length' "$WORK/rendered/_root.yaml")"
-  [[ "$got" == "$want" ]] || fail "root 앱 차트의 Application $got 개 ≠ 배포 대상 앱 $want 개"
-  echo "OK root Application $got 개 $(yq ea '[select(.kind == "Application") | .metadata.annotations["argocd.argoproj.io/sync-wave"] + ":" + .metadata.name] | join(" ")' "$WORK/rendered/_root.yaml")"
+  for cluster in kubeadm eks; do
+    helm template prod-apps "$ENV_DIR" -n argocd --set-string gitopsRevision=0000000000000000000000000000000000000000 \
+      --set-string "cluster=$cluster" --set-json "clusterValues=$(cat "$WORK/cluster-values.yaml")" > "$WORK/rendered/_root-$cluster.yaml"
+    want=0
+    for dir in "${APPS[@]}"; do
+      enabled "$dir" || continue
+      # clusters 가 없으면 모든 클러스터
+      [[ "$(CLUSTER="$cluster" field "$dir" '(.clusters == null) or (.clusters | contains([strenv(CLUSTER)]))')" == "true" ]] && want=$((want + 1))
+    done
+    got="$(yq ea '[select(.kind == "Application")] | length' "$WORK/rendered/_root-$cluster.yaml")"
+    [[ "$got" == "$want" ]] || fail "root 앱 차트($cluster)의 Application $got 개 ≠ 배포 대상 앱 $want 개"
+    echo "OK root($cluster) Application $got 개"
+  done
 else
   echo "건너뜀 (envs/prod/Chart.yaml 없음 — ArgoCD 전환 전)"
 fi
