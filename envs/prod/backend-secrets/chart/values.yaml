@@ -6,7 +6,7 @@ clusterSecretStore: aws-secrets-manager
 # 41-main-data 만 다시 만들었으면 ExternalSecret 에 force-sync annotation 을 달거나 이 주기를 기다린다
 refreshInterval: 1h
 
-# Secret key ← Secrets Manager <Secret 이름>.<JSON 속성>. Secret 은 Terraform 41-main-data 가 고정 이름으로 만든다.
+# Secret key ← Secrets Manager <Secret 이름>.<JSON 속성>. Secret 은 Terraform 41-main-data(kakao-login 은 🔒 12-secrets)가 고정 이름으로 만든다.
 # 서비스가 새 secretEnv 를 쓰면 여기와 41-main-data 에 같이 추가한다 (backend 차트 values 의 services.*.secretEnv)
 data:
   team04-hotel/prod/main-db:
@@ -23,6 +23,10 @@ data:
     MOCK_PG_SECRET: mock_pg_secret
     # n8n 워크플로 활성화용 내부 owner 계정 (backend 차트 n8n, 사람이 로그인하지 않음)
     N8N_INIT_OWNER_PASSWORD: n8n_owner_password
+  # 카카오 로그인 (auth-service). 🔒 Terraform 12-secrets 가 값을 둔다. 등록 전에 반영하면 이 ExternalSecret 전체가 동기화에 실패한다
+  team04-hotel/prod/kakao-login:
+    KAKAO_CLIENT_ID: client_id
+    KAKAO_CLIENT_SECRET: client_secret
 
 # 시드 관리자 계정 Secret (backend 차트 seed.adminSecretName, LDP-141). Secrets Manager 값은 Terraform 12-secrets 가 고정 이름으로 둔다
 # (사람이 정한 계정이라 매일 재생성 스택이 만들지 않음). ESO Role 읽기 권한은 70 의 seed_admin_secret_name

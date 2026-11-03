@@ -1,0 +1,17 @@
+# aws-load-balancer-controller chart values (prod EKS). vpcId 는 root 앱 appValues 로 받는다 (72, 매일 바뀜)
+clusterName: team04-hotel-main-eks   # 72 cluster_name
+region: us-east-1
+
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller   # 72 Pod Identity Association 과 같아야 함
+
+# 차트 기본값은 렌더링마다 webhook 인증서를 새로 만들어 ArgoCD 가 계속 OutOfSync 로 본다
+enableCertManager: true
+
+# LB 를 만들지 않는다
+createIngressClassResource: false
+enableServiceMutatorWebhook: false
+enableShield: false
+enableWaf: false
+enableWafv2: false

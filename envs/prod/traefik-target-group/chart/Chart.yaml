@@ -1,0 +1,5 @@
+apiVersion: v2
+name: traefik-target-group
+description: TargetGroupBinding Traefik → 80-main-edge eks Target Group
+type: application
+version: 1.0.0

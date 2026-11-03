@@ -4,7 +4,7 @@
 #                                                                                 └→ S3 team04-hotel-logs/app-logs/main-cluster/<날짜>/<노드>/
 #
 # CloudWatch 로그 그룹은 매일 destroy 로 지워지고, 버킷(🔒 10-global, Object Lock 7일 · 90일 보관)에 같은 로그가 남는다.
-# ServiceAccount 이름 fluent-bit 는 pod-identity-webhook 매핑 · Terraform 70 irsa.tf 신뢰 정책 sub 와 같아야 한다
+# ServiceAccount 이름 fluent-bit 는 pod-identity-webhook 매핑 · Terraform 51-pod-roles 신뢰 정책 sub 와 같아야 한다
 
 fullnameOverride: fluent-bit
 

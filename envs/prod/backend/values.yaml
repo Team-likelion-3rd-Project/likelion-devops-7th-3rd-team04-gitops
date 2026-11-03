@@ -13,7 +13,7 @@ global:
   imageRegistry: "{{ .Values.global.awsAccountId }}.dkr.ecr.us-east-1.amazonaws.com"
   imageRepositoryPrefix: team04-hotel/
   # 커밋 SHA (latest 금지 — 차트가 렌더링을 거부, ECR 도 IMMUTABLE)
-  imageTag: "01d29f02f8d9e67cdead254a2bd14d35c1f28f5c" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
+  imageTag: "d36b18cbe08972ca5e5463677d6338f982f265cd" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
   # 워커 kubelet 이 노드 Role 로 ECR pull (ecr-credential-provider, Ansible aws_ecr_credential_provider) → imagePullSecret 불필요
   imagePullSecrets: []
   secretName: backend-secrets
@@ -75,6 +75,20 @@ services:
       # LDP-160 (api-gateway 주석 참고)
       USER_SERVICE_HOST: "dns:///user-service-headless:3001"
       BOOKING_SERVICE_HOST: "dns:///booking-service-headless:3003"
+      # 카카오 로그인 후 돌아올 프론트 주소. 카카오 콘솔 Redirect URI 와 문자열까지 같아야 한다
+      KAKAO_REDIRECT_URIS: "https://meomulm.click/auth/kakao/callback"
+    # 차트 기본값 목록을 통째로 대체하므로 기본값 8개도 함께 적는다
+    secretEnv:
+      - DB_HOST
+      - DB_USERNAME
+      - DB_PASSWORD
+      - DB_DATABASE
+      - JWT_ACCESS_SECRET
+      - JWT_REFRESH_SECRET
+      - REDIS_HOST
+      - REDIS_PASSWORD
+      - KAKAO_CLIENT_ID
+      - KAKAO_CLIENT_SECRET
   chat-bot-service:
     env:
       # DYNAMODB_ENDPOINT 미설정 = AWS 기본 주소, 자격 증명은 IRSA(team04-hotel-chat-bot-service, 두 테이블 PutItem · Query 만)
