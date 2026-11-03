@@ -1,0 +1,4 @@
+# 72 는 80 보다 먼저 만들어져 ARN 을 받을 수 없어 이름으로 찾는다. TG 가 생길 때까지 컨트롤러가 재시도한다
+targetGroupName: team04-hotel-main-eks   # 80-main-edge aws_lb_target_group.eks
+serviceName: traefik
+servicePort: web

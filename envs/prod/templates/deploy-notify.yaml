@@ -4,7 +4,8 @@
   CronJob deploy-notify-watch (1분)        : root sync 가 Failed · Error 로 끝났으면 → 실패 (같은 sync 는 한 번만)
 SyncFail hook 은 쓰지 않는다 — 시간 제한(controller.sync.timeout.seconds) · 사람의 종료로 끝난 sync 에서는 실행되지 않는다
 (2026-10-27 검증). argocd 네임스페이스는 pod-identity-webhook 대상이 아니라(webhook 장애가 ArgoCD 를 막지 않게)
-IRSA 환경 변수를 직접 넣고 토큰(aud sts.amazonaws.com)을 마운트한다.
+kubeadm 에서는 IRSA 환경 변수를 직접 넣고 토큰(aud sts.amazonaws.com)을 마운트한다.
+EKS 는 Pod Identity Association(72)이 자격 증명을 주므로 넣지 않는다 (자체 OIDC 토큰은 EKS 에서 발급되지 않음).
 */ -}}
 {{- if include "prod-apps.notifyEnabled" . }}
 apiVersion: v1
@@ -136,10 +137,12 @@ template:
             value: {{ join " " $apps | quote }}
           - name: DEPLOY_TOPIC_ARN
             value: {{ printf "arn:aws:sns:%s:%s:%s" $n.region $account $n.topicName | quote }}
+          {{- if eq $.Values.cluster "kubeadm" }}
           - name: AWS_ROLE_ARN
             value: {{ printf "arn:aws:iam::%s:role/%s" $account $n.roleName | quote }}
           - name: AWS_WEB_IDENTITY_TOKEN_FILE
             value: /var/run/secrets/sts.amazonaws.com/serviceaccount/token
+          {{- end }}
           - name: AWS_DEFAULT_REGION
             value: {{ $n.region | quote }}
           - name: AWS_STS_REGIONAL_ENDPOINTS
@@ -163,9 +166,11 @@ template:
             readOnly: true
           - name: tmp
             mountPath: /tmp
+          {{- if eq $.Values.cluster "kubeadm" }}
           - name: aws-token
             mountPath: /var/run/secrets/sts.amazonaws.com/serviceaccount
             readOnly: true
+          {{- end }}
     volumes:
       - name: script
         configMap:
@@ -173,7 +178,8 @@ template:
       - name: tmp
         emptyDir:
           sizeLimit: 64Mi
-      # 70 irsa.tf deploy-notify Role 신뢰 정책(sub system:serviceaccount:argocd:deploy-notify, aud sts.amazonaws.com)
+      {{- if eq $.Values.cluster "kubeadm" }}
+      # 51-pod-roles deploy-notify Role 신뢰 정책(sub system:serviceaccount:argocd:deploy-notify, aud sts.amazonaws.com)
       - name: aws-token
         projected:
           defaultMode: 0444
@@ -182,4 +188,5 @@ template:
                 audience: sts.amazonaws.com
                 expirationSeconds: 3600
                 path: token
+      {{- end }}
 {{- end }}

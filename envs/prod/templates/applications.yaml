@@ -4,7 +4,10 @@
   type git   → 다른 Git 레포의 path · revision(커밋 SHA)
   type local → 이 레포의 <앱>/<path>
   values     → 이 레포의 <앱>/values.yaml (두 번째 source ref values, root 와 같은 커밋)
+               <앱>/values-<cluster>.yaml 이 있으면 그 뒤에 더한다 (클러스터별 차이만)
+  clusters   → 이 앱을 띄울 클러스터 목록 (kubeadm · eks). 없으면 모든 클러스터
   order      → sync-wave. root 는 앞 wave 의 Application 이 Healthy(argocd-cm 헬스 체크: Synced + 이 커밋)가 되어야 다음으로 간다
+  compareOptions → Application annotation argocd.argoproj.io/compare-options (앱별 비교 방식, 없으면 annotation 없음)
 
 Application 에 finalizer 를 달지 않는다 — 앱 폴더를 지우면 Application 만 지워지고 리소스는 남는다 (지우는 것은 사람이 함).
 */ -}}
@@ -13,6 +16,10 @@ Application 에 finalizer 를 달지 않는다 — 앱 폴더를 지우면 Appli
 {{- $app := .name }}
 {{- $def := .def }}
 {{- $values := $.Files.Get (printf "%s/values.yaml" $app) }}
+{{- $clusterFile := $.Files.Get (printf "%s/values-%s.yaml" $app $.Values.cluster) }}
+{{- $valuesObject := dict }}
+{{- if $def.clusterValues }}{{- $valuesObject = merge $valuesObject (deepCopy $.Values.clusterValues) }}{{- end }}
+{{- with (index $.Values.appValues $app) }}{{- $valuesObject = merge $valuesObject (deepCopy .) }}{{- end }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -23,6 +30,9 @@ metadata:
     team04.io/root-app: {{ $.Release.Name }}
   annotations:
     argocd.argoproj.io/sync-wave: {{ .order | quote }}
+    {{- with $def.compareOptions }}
+    argocd.argoproj.io/compare-options: {{ . | quote }}
+    {{- end }}
 spec:
   project: prod
   destination:
@@ -49,14 +59,19 @@ spec:
     {{- end }}
       helm:
         releaseName: {{ required (printf "%s: chart.yaml 에 release 가 필요합니다" $app) $def.release }}
-        {{- if $values }}
+        {{- if or $values $clusterFile }}
         valueFiles:
+          {{- if $values }}
           - {{ printf "$values/%s/%s/values.yaml" $.Values.appsPath $app }}
+          {{- end }}
+          {{- if $clusterFile }}
+          - {{ printf "$values/%s/%s/values-%s.yaml" $.Values.appsPath $app $.Values.cluster }}
+          {{- end }}
         {{- end }}
-        {{- if $def.clusterValues }}
+        {{- if $valuesObject }}
         # 클러스터 값(계정 ID 등). 모르는 키를 거부하는 차트 schema 가 있어 쓰는 앱에만 넘긴다
         valuesObject:
-          {{- toYaml $.Values.clusterValues | nindent 10 }}
+          {{- toYaml $valuesObject | nindent 10 }}
         {{- end }}
     # 반드시 마지막 source — argocd-cm 의 Application 헬스 체크가 마지막 source 의 revision 으로 이 커밋 반영 여부를 본다
     - repoURL: {{ $.Values.gitopsRepoURL }}

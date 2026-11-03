@@ -1,0 +1,5 @@
+apiVersion: v2
+name: mysql-exporter-setup
+description: 메인 RDS mysqld_exporter 계정 생성 Job, exporter my.cnf Secret(ExternalSecret), RDS CA 인증서 ConfigMap
+type: application
+version: 0.1.0

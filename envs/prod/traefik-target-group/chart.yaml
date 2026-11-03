@@ -1,0 +1,8 @@
+# TargetGroupBinding — Traefik 파드 IP 를 80-main-edge eks Target Group 에 등록한다. 트래픽은 80 traffic_weights 로 정한다
+type: local
+path: chart   # 이 폴더 기준
+namespace: traefik
+release: traefik-target-group
+clusters: [eks]
+# Traefik(10) · LB Controller(18) 다음
+order: 19
