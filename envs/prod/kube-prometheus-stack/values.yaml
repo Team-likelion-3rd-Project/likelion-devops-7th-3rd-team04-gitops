@@ -156,11 +156,17 @@ alertmanager:
             sigv4:
               region: us-east-1
             send_resolved: true
+            # 기본 제목(__subject)은 공통 라벨을 전부 이어 붙여 SNS Subject 제한(줄바꿈 · 제어 문자 없음, 100자 미만)을 넘긴다 → Publish 거부
+            subject: '{{ "{{" }} template "team04.sns.subject" . {{ "}}" }}'
             message: '{{ "{{" }} template "team04.chatbot.message" . {{ "}}" }}'
   # Chatbot 사용자 정의 알림 형식 (10-global alarm_recovered · 배포 알림과 같은 형식). Chatbot 은 이 JSON 이 아니면 버린다.
   # 동적 값은 toJson 으로 escape 한 뒤 양 끝 따옴표를 뗀다 (기본 규칙 description 에 " 가 들어 있음)
   templateFiles:
     chatbot.tmpl: |-
+      {{/* SNS Subject — Chatbot 은 쓰지 않음(이메일 구독자용). ASCII 출력 문자만 남기고 90자에서 자른다 */}}
+      {{ define "team04.sns.subject" -}}
+      {{ printf "Prometheus %s %s" .Status .CommonLabels.alertname | reReplaceAll `[^ -~]` "" | reReplaceAll `^(.{0,90}).*$` "$1" }}
+      {{- end }}
       {{ define "team04.chatbot.message" -}}
       {"version":"1.0","source":"custom","content":{"textType":"client-markdown",
       "title":"{{ if eq .Status "firing" }}:rotating_light: Prometheus 알림{{ else }}:white_check_mark: Prometheus 해소{{ end }} | {{ .CommonLabels.alertname | toJson | reReplaceAll `^"|"$` "" }}",
