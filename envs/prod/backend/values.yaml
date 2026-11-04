@@ -48,6 +48,8 @@ services:
       AUTH_SERVICE_HOST: "dns:///auth-service-headless:3006"
       # 결제 서버는 결제 VPC — 메인 VPC 의 PrivateLink 엔드포인트 고정 이름으로 호출 (Terraform 71-payment-link, 재생성해도 같음)
       PAYMENT_SERVICE_HOST: "payment.team04-hotel.internal:3004"
+      # 부하 테스트 브랜치 전용 — k6 는 생성기 IP 하나에서 보낸다. 1분 기준이라 stress 상한 500 요청/초 = 30,000 (기본 100)
+      THROTTLE_LIMIT: "30000"
   booking-service:
     replicas: 2
     env:
@@ -72,6 +74,8 @@ services:
     env:
       # ElastiCache Valkey 는 전송 암호화 required (41-main-data)
       REDIS_TLS: "true"
+      # 부하 테스트 브랜치 전용 — k6 setup 토큰이 soak(45분) · 하루 테스트 동안 만료되지 않게 (기본 15m)
+      JWT_ACCESS_EXPIRES_IN: "2h"
       # LDP-160 (api-gateway 주석 참고)
       USER_SERVICE_HOST: "dns:///user-service-headless:3001"
       BOOKING_SERVICE_HOST: "dns:///booking-service-headless:3003"
