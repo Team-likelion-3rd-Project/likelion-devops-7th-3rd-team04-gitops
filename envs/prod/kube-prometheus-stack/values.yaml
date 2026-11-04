@@ -106,6 +106,10 @@ prometheus:
     storageSpec:
       emptyDir:
         sizeLimit: 5Gi
+    # emptyDir 라 Pod 가 옮겨지면 그날 지표가 모두 사라진다 (11-04 노드 축소 때 발생). Cluster Autoscaler 가 축소할 노드로 고르지 않게 한다 (LDP-227)
+    podMetadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
     resources:
       requests:
         cpu: 100m
@@ -340,3 +344,24 @@ additionalPrometheusRulesMap:
             annotations:
               summary: 워커 평균 CPU(3시간)가 41% 를 넘음 — t3a unlimited 보다 m6a 가 싸질 수 있음
               description: 'Grafana 노드 대시보드 · Terraform 90 ec2-cpu-surplus-charged 확인. 계속되면 워커 인스턴스 타입(70 worker_instance_type · 72 MNG) 검토. 현재 {{ $value | humanizePercentage }}'
+      # Cluster Autoscaler (LDP-227, EKS 만 — kubeadm 에는 지표가 없어 울리지 않는다)
+      - name: team04.autoscaler
+        rules:
+          # 노드 증설을 시도했지만 실패 (EC2 용량 부족 · 권한 · 시작 템플릿 오류 등)
+          - alert: ClusterAutoscalerScaleUpFailed
+            expr: increase(cluster_autoscaler_failed_scale_ups_total[15m]) > 0
+            labels:
+              severity: warning
+            annotations:
+              summary: Cluster Autoscaler 노드 증설 실패 (15분 안)
+              description: 'kubectl -n kube-system logs deploy/cluster-autoscaler 로 원인 확인. 사유 {{ $labels.reason }}'
+          # 노드가 상한(72 node_max_size)에 닿았는데 자리가 없는 Pod 가 남아 있음 → 상한 · requests 검토
+          - alert: ClusterAutoscalerAtMaxWithPendingPods
+            expr: |
+              max by (cluster) (cluster_autoscaler_nodes_count{state="ready"}) >= max by (cluster) (cluster_autoscaler_max_nodes_count)
+              and max by (cluster) (cluster_autoscaler_unschedulable_pods_count) > 0
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: 워커 노드가 최대 대수에 닿았고 배치되지 못한 Pod 가 10분 넘게 남아 있음
