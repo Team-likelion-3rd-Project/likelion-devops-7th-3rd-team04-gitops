@@ -5,8 +5,8 @@ type: local
 path: chart   # 이 폴더 기준
 namespace: monitoring
 release: mysql-exporter-setup
-enabled: false
+enabled: true   # 부하 테스트 브랜치 전용 — DB 서버 지표 수집
 # kube-prometheus-stack(60) 다음 — 계정 생성 Job 이 실패해도 관측 스택은 먼저 뜬다. mysql-exporter(65) 보다 먼저
 order: 62
-# 계정 Job 을 한쪽에서만 실행한다. 전환 때(LDP-202) eks 로 옮긴다
-clusters: [kubeadm]
+# 계정 Job 을 한쪽에서만 실행한다. kubeadm(70)은 LDP-202 에서 제거됨
+clusters: [eks]
