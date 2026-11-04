@@ -36,6 +36,10 @@ metrics:
 services:
   api-gateway:
     replicas: 2
+    # 부하 테스트 노드 2대 튜닝 A — 기준선 stress 200 요청/초에서 limit 500m throttling 37~40%. requests 는 2대(3.86코어)에 맞춰 300m
+    resources:
+      requests: { cpu: 300m, memory: 128Mi }
+      limits: { cpu: 1000m, memory: 512Mi }
     env:
       # 프론트(13-frontend) 출처. 하나만 허용하므로 www 는 CloudFront 에서 루트로 리다이렉트
       CORS_ORIGIN: "https://meomulm.click"
@@ -61,6 +65,11 @@ services:
       SQS_REGION: us-east-1
       PAYMENT_RESULT_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/{{ .Values.global.awsAccountId }}/payment-result.fifo"
   hotel-service:
+    # 부하 테스트 노드 2대 튜닝 A — Pod 1개 · 풀 10 에서 커넥션 대기 413, 250 요청/초 throttling 57~63%
+    replicas: 2
+    resources:
+      requests: { cpu: 300m, memory: 128Mi }
+      limits: { cpu: 1000m, memory: 512Mi }
     env:
       # 객실 사진 버킷 (13-frontend). 엔드포인트 · 키를 비우면 AWS 기본 주소 + IRSA(team04-hotel-hotel-service)
       S3_BUCKET: team04-hotel-room-images
