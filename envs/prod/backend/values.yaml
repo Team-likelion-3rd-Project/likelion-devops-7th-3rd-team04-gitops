@@ -36,17 +36,6 @@ metrics:
 services:
   api-gateway:
     replicas: 2
-    # 부하 테스트 튜닝 1 — 200 요청/초에서 Pod당 0.31코어, 250 에서 limit 500m 에 닿아 throttling 77% (11-04 stress)
-    resources:
-      requests: { cpu: 400m, memory: 128Mi }
-      limits: { cpu: 1000m, memory: 512Mi }
-    # 부하 테스트 튜닝 2 — 튜닝 1 stress 에서 350 요청/초부터 Pod 2개가 limit 1000m 에 닿음. 요청당 CPU 약 4ms →
-    # 70%(280m) ≈ Pod당 70 요청/초에서 확장 시작. DB 를 쓰지 않아 늘려도 RDS 연결 상한(68)과 무관. 켜면 replicas 는 렌더링 안 됨
-    hpa:
-      enabled: true
-      minReplicas: 2
-      maxReplicas: 4
-      cpuUtilization: 70
     env:
       # 프론트(13-frontend) 출처. 하나만 허용하므로 www 는 CloudFront 에서 루트로 리다이렉트
       CORS_ORIGIN: "https://meomulm.click"
@@ -72,11 +61,6 @@ services:
       SQS_REGION: us-east-1
       PAYMENT_RESULT_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/{{ .Values.global.awsAccountId }}/payment-result.fifo"
   hotel-service:
-    # 부하 테스트 튜닝 1 — Pod 1개 · 커넥션 풀 10 이 바닥남(대기 425), 250 요청/초에서 0.45코어 · throttling 71% (11-04 stress)
-    replicas: 2
-    resources:
-      requests: { cpu: 400m, memory: 128Mi }
-      limits: { cpu: 1000m, memory: 512Mi }
     env:
       # 객실 사진 버킷 (13-frontend). 엔드포인트 · 키를 비우면 AWS 기본 주소 + IRSA(team04-hotel-hotel-service)
       S3_BUCKET: team04-hotel-room-images
