@@ -44,13 +44,11 @@ services:
     # requests 는 부하 시 실사용(250 요청/초 spike 에서 Pod 당 0.6 ~ 0.9코어)에 가깝게 둔다 — 300m 이면 HPA 가 늘린 Pod 가
     # 포화된 기존 노드에 그대로 들어가 Pending 이 생기지 않고 노드도 늘지 않았다 (11-04 검증). 500m 면 4개(2코어)가 2대에 안 들어가 증설된다
     # 요청당 CPU 약 4ms → 70%(350m) ≈ Pod당 85 요청/초에서 확장 시작. HPA 를 켜면 replicas 는 렌더링되지 않는다
-    # 부하 테스트 2일차 1단계 — 1일차 노드 2대 튜닝 A 재현 (300m / 1000m · 2개 고정, HPA 끔). 2단계에서 이 커밋을 되돌린다
-    replicas: 2
     resources:
-      requests: {cpu: 300m, memory: 128Mi}
+      requests: {cpu: 500m, memory: 128Mi}
       limits: {cpu: 1000m, memory: 512Mi}
     hpa:
-      enabled: false
+      enabled: true
       minReplicas: 2
       maxReplicas: 4
       cpuUtilization: 70
@@ -96,8 +94,6 @@ services:
       IMAGE_BASE_URL: "https://meomulm.click"
       # 조회 캐시 Valkey(REDIS_HOST · REDIS_PASSWORD 는 차트 기본 secretEnv). ElastiCache 는 전송 암호화 required (41-main-data)
       REDIS_TLS: "true"
-      # 부하 테스트 2일차 ④ — probe 비교를 전체 흐름 stress #3(캐시 끔)과 같은 조건으로
-      READ_CACHE_ENABLED: "false"
   auth-service:
     env:
       # ElastiCache Valkey 는 전송 암호화 required (41-main-data)
