@@ -71,6 +71,10 @@ services:
       THROTTLE_LIMIT: "30000"
   booking-service:
     replicas: 2
+    # 부하 테스트 2일차 — 결제 확정 40회/초에서 limit 500m throttling 81~93% → 풀 고갈 (노드 여유와 무관). limit 만 올려 효과 확인
+    resources:
+      requests: {cpu: 200m, memory: 128Mi}
+      limits: {cpu: 1000m, memory: 512Mi}
     env:
       HOTEL_SERVICE_HOST: "dns:///hotel-service-headless:3002" # LDP-160
       # 결제 서버 gRPC (PrivateLink, Terraform 71-payment-link)
