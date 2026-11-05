@@ -1,0 +1,9 @@
+# 자리 수 · 크기. 한 자리 = 가장 먼저 늘어나는 Pod 1개 (api-gateway requests 와 같게)
+# replicas 0 이면 자리를 비우지 않는다 (끄기)
+replicas: 1
+resources:
+  requests: {cpu: 500m, memory: 128Mi}
+  limits: {cpu: 500m, memory: 128Mi}
+# 일반 Pod(0) 보다 낮아 밀려나고, CA 의 expendable-pods-priority-cutoff(-10) 보다 높아 CA 가 이 Pod 를 위해 노드를 늘린다
+priority: -1
+image: registry.k8s.io/pause:3.10
