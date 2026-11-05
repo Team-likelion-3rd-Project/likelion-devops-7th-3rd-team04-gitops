@@ -5,6 +5,17 @@
 deployment:
   replicas: 2
 
+# 부하 테스트 2일차 ②' — 노드마다 1개. 2개가 한 노드(또는 포화된 기존 노드)에 몰리면 모든 요청의 입구가 같이 밀린다
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: traefik
+        app.kubernetes.io/instance: traefik-traefik
+    matchLabelKeys: [pod-template-hash]
+
 ingressClass:
   enabled: true
   isDefaultClass: false
