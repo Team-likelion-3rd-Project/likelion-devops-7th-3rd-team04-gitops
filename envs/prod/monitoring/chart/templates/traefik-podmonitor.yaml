@@ -1,0 +1,18 @@
+{{- /*
+Traefik 지표 수집 (LDP-228). Traefik 은 차트 기본값으로 metrics 엔트리포인트(:9100/metrics)에 Prometheus 지표를 낸다.
+Traefik 앱(order 10)은 PodMonitor CRD(prometheus-operator-crds, 12)보다 먼저 뜨므로 Traefik 차트의 ServiceMonitor 대신 여기(55)에 둔다.
+백엔드가 없거나 응답하지 못해 Traefik 이 직접 돌려준 502 · 503 은 앱 지표(http_server_request_duration_seconds)에 남지 않고 여기에만 남는다
+*/ -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: traefik
+  namespace: {{ .Values.traefik.namespace }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s

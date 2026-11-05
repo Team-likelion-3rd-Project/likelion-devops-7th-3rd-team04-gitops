@@ -36,6 +36,12 @@ defaultRules:
 windowsMonitoring:
   enabled: false
 
+# 기본 규칙 등급 조정 (LDP-220). 워커 2대라 요청 합이 "노드 1대 빠진 용량"을 늘 넘어 하루 내내 firing — 부하 테스트 전까지 노드 수 ·
+# 요청값을 바꾸지 않으므로 info 로 내려 Slack 에서 뺀다(Alerts 화면에는 남음). 부하 테스트 결과로 노드 · 요청값을 정한 뒤 warning 으로 되돌린다
+customRules:
+  KubeCPUOvercommit:
+    severity: info
+
 # ── Prometheus Operator ──────────────────────────────────
 prometheusOperator:
   # admission webhook 인증서를 cert-manager(order 15)가 발급 — 차트 기본(certgen hook Job)은 ArgoCD 에서 sync 마다 다시 돈다
@@ -106,6 +112,10 @@ prometheus:
     storageSpec:
       emptyDir:
         sizeLimit: 5Gi
+    # emptyDir 라 Pod 가 옮겨지면 그날 지표가 모두 사라진다 (11-04 노드 축소 때 발생). Cluster Autoscaler 가 축소할 노드로 고르지 않게 한다 (LDP-227)
+    podMetadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
     resources:
       requests:
         cpu: 100m
@@ -156,11 +166,17 @@ alertmanager:
             sigv4:
               region: us-east-1
             send_resolved: true
+            # 기본 제목(__subject)은 공통 라벨을 전부 이어 붙여 SNS Subject 제한(줄바꿈 · 제어 문자 없음, 100자 미만)을 넘긴다 → Publish 거부
+            subject: '{{ "{{" }} template "team04.sns.subject" . {{ "}}" }}'
             message: '{{ "{{" }} template "team04.chatbot.message" . {{ "}}" }}'
   # Chatbot 사용자 정의 알림 형식 (10-global alarm_recovered · 배포 알림과 같은 형식). Chatbot 은 이 JSON 이 아니면 버린다.
   # 동적 값은 toJson 으로 escape 한 뒤 양 끝 따옴표를 뗀다 (기본 규칙 description 에 " 가 들어 있음)
   templateFiles:
     chatbot.tmpl: |-
+      {{/* SNS Subject — Chatbot 은 쓰지 않음(이메일 구독자용). ASCII 출력 문자만 남기고 90자에서 자른다 */}}
+      {{ define "team04.sns.subject" -}}
+      {{ printf "Prometheus %s %s" .Status .CommonLabels.alertname | reReplaceAll `[^ -~]` "" | reReplaceAll `^(.{0,90}).*$` "$1" }}
+      {{- end }}
       {{ define "team04.chatbot.message" -}}
       {"version":"1.0","source":"custom","content":{"textType":"client-markdown",
       "title":"{{ if eq .Status "firing" }}:rotating_light: Prometheus 알림{{ else }}:white_check_mark: Prometheus 해소{{ end }} | {{ .CommonLabels.alertname | toJson | reReplaceAll `^"|"$` "" }}",
@@ -279,6 +295,19 @@ additionalPrometheusRulesMap:
               severity: warning
             annotations:
               summary: 컨테이너가 메모리 limit 을 넘어 OOMKilled 로 재시작
+          # 헬스 체크 실패(부하 포화로 이벤트 루프 지연) · 오류 종료로 한 번이라도 재시작하면 알림 (LDP-228).
+          # 11-04 부하 테스트에서 api-gateway 가 liveness 실패로 1 ~ 2번 재시작하며 502 · 503 이 났지만 PodRestartingFrequently(15분 3번)에 걸리지 않았다.
+          # 시작 직후 15분(매일 재생성 · 배포 직후 DB 대기 등)은 뺀다
+          - alert: BackendContainerRestarted
+            expr: |
+              increase(kube_pod_container_status_restarts_total{namespace="backend"}[5m]) > 0
+              and on (namespace, pod)
+              (time() - kube_pod_start_time{namespace="backend"}) > 900
+            labels:
+              severity: warning
+            annotations:
+              summary: backend 컨테이너가 재시작 (5분 안)
+              description: '{{ $labels.pod }} / {{ $labels.container }}. 이유는 kube_pod_container_status_last_terminated_reason 과 kubectl describe pod 이벤트(Liveness probe failed 등)로 확인'
           - alert: ContainerMemoryNearLimit
             expr: |
               max by (namespace, pod, container) (container_memory_working_set_bytes{container!="", container!="POD"})
@@ -317,7 +346,9 @@ additionalPrometheusRulesMap:
   # 운영 전용 (온프레미스 사본 아님, LDP-200). 워커가 t3a unlimited 로 계속 버틸 만한지 — kubeadm · EKS 공통.
   # 기준 41% 는 t3a.large 초과 크레딧 요금을 더하면 m6a.large 보다 비싸지는 평균 사용률(근사치).
   # CP 는 kube_node_role control-plane 으로 뺀다 (EKS 는 CP 노드가 없어 그대로 워커 전부).
-  # 크레딧 과금 자체는 Terraform 90 ec2-cpu-surplus-charged (CloudWatch) 가 본다. Prometheus 가 멈추면 이 알람도 없다
+  # 크레딧 과금 자체는 Terraform 90 ec2-cpu-surplus-charged (CloudWatch) 가 본다. Prometheus 가 멈추면 이 알람도 없다.
+  # idle 비율은 전체 CPU 시간으로 나눠 구한다 (LDP-220) — 매일 재생성이라 Prometheus 시작 후 3시간은 [3h] 창에 데이터가 일부만 있어
+  # rate(idle) 이 창 전체로 나뉘어 작게 나오고, 1 - rate(idle) 은 97% 에서 3시간 동안 내려오며 오탐한다. 분자 · 분모를 같은 창으로 나누면 상쇄된다
   team04-nodes:
     groups:
       - name: team04.nodes
@@ -325,7 +356,8 @@ additionalPrometheusRulesMap:
           - alert: WorkerCpuAboveT3aBreakEven
             expr: |
               avg by (cluster) (
-                1 - avg by (cluster, node) (rate(node_cpu_seconds_total{mode="idle"}[3h]))
+                1 - sum by (cluster, node) (rate(node_cpu_seconds_total{mode="idle"}[3h]))
+                  / sum by (cluster, node) (rate(node_cpu_seconds_total[3h]))
                 unless on (node) kube_node_role{role="control-plane"}
               ) > 0.41
             for: 15m
@@ -334,3 +366,24 @@ additionalPrometheusRulesMap:
             annotations:
               summary: 워커 평균 CPU(3시간)가 41% 를 넘음 — t3a unlimited 보다 m6a 가 싸질 수 있음
               description: 'Grafana 노드 대시보드 · Terraform 90 ec2-cpu-surplus-charged 확인. 계속되면 워커 인스턴스 타입(70 worker_instance_type · 72 MNG) 검토. 현재 {{ $value | humanizePercentage }}'
+      # Cluster Autoscaler (LDP-227, EKS 만 — kubeadm 에는 지표가 없어 울리지 않는다)
+      - name: team04.autoscaler
+        rules:
+          # 노드 증설을 시도했지만 실패 (EC2 용량 부족 · 권한 · 시작 템플릿 오류 등)
+          - alert: ClusterAutoscalerScaleUpFailed
+            expr: increase(cluster_autoscaler_failed_scale_ups_total[15m]) > 0
+            labels:
+              severity: warning
+            annotations:
+              summary: Cluster Autoscaler 노드 증설 실패 (15분 안)
+              description: 'kubectl -n kube-system logs deploy/cluster-autoscaler 로 원인 확인. 사유 {{ $labels.reason }}'
+          # 노드가 상한(72 node_max_size)에 닿았는데 자리가 없는 Pod 가 남아 있음 → 상한 · requests 검토
+          - alert: ClusterAutoscalerAtMaxWithPendingPods
+            expr: |
+              max by (cluster) (cluster_autoscaler_nodes_count{state="ready"}) >= max by (cluster) (cluster_autoscaler_max_nodes_count)
+              and max by (cluster) (cluster_autoscaler_unschedulable_pods_count) > 0
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: 워커 노드가 최대 대수에 닿았고 배치되지 못한 Pod 가 10분 넘게 남아 있음

@@ -1,0 +1,855 @@
+{
+  "title": "team04 / 진입점 (prod)",
+  "uid": "team04-edge-prod",
+  "tags": [
+    "team04",
+    "edge",
+    "prod"
+  ],
+  "description": "사용자 기준 요청 · 에러 (ALB · Traefik). 앱이 응답하지 못한 502 · 503 은 서비스 개요의 앱 5xx 비율에 잡히지 않으므로 여기서 본다 (LDP-228). ALB 는 매일 재생성되어 id 가 바뀌므로 이름(team04-hotel-main-alb)으로 SEARCH 해 합산한다",
+  "timezone": "browser",
+  "editable": true,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "데이터소스",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "ALB — 사용자 기준 (CloudWatch AWS/ApplicationELB, 1분)",
+      "collapsed": false,
+      "id": 1,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx 비율",
+      "description": "ALB 가 받은 요청 중 5xx 비율. 대상(Traefik · 앱) 5xx + ALB 자체 5xx(대상 없음 · 응답 없음). 앱이 응답하지 못한 장애도 여기에 잡힌다. 90 알람 main-alb-5xx-rate 와 같은 식",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "REQ",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "req",
+          "expression": "SUM(SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"RequestCount\" team04-hotel-main-alb', 'Sum', 60))",
+          "label": "요청",
+          "hide": true
+        },
+        {
+          "refId": "T5",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "t5",
+          "expression": "SUM(SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"HTTPCode_Target_5XX_Count\" team04-hotel-main-alb', 'Sum', 60))",
+          "label": "대상 5xx",
+          "hide": true
+        },
+        {
+          "refId": "E5",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "e5",
+          "expression": "SUM(SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"HTTPCode_ELB_5XX_Count\" team04-hotel-main-alb', 'Sum', 60))",
+          "label": "ALB 5xx",
+          "hide": true
+        },
+        {
+          "refId": "RATE",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "",
+          "expression": "IF(FILL(req, 0) > 0, 100 * (FILL(t5, 0) + FILL(e5, 0)) / FILL(req, 1), 0)",
+          "label": "5xx 비율",
+          "hide": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 2,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "요청 · 5xx 건수 (분당)",
+      "description": "대상 5xx = Traefik · 앱이 돌려준 5xx. ALB 5xx = 정상 대상이 없거나 대상이 응답하지 않아 ALB 가 직접 돌려준 502 · 503 · 504",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "",
+          "expression": "SUM(SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"RequestCount\" team04-hotel-main-alb', 'Sum', 60))",
+          "label": "요청",
+          "hide": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "",
+          "expression": "SUM(SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"HTTPCode_Target_5XX_Count\" team04-hotel-main-alb', 'Sum', 60))",
+          "label": "대상 5xx",
+          "hide": false
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "",
+          "expression": "SUM(SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"HTTPCode_ELB_5XX_Count\" team04-hotel-main-alb', 'Sum', 60))",
+          "label": "ALB 5xx",
+          "hide": false
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "",
+          "expression": "SUM(SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"HTTPCode_Target_4XX_Count\" team04-hotel-main-alb', 'Sum', 60))",
+          "label": "대상 4xx",
+          "hide": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 3,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "응답 시간 (대상)",
+      "description": "ALB 가 대상(Traefik)에 요청을 보내고 응답을 받기까지. k6 p95 와 비교용",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "",
+          "expression": "MAX(SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"TargetResponseTime\" team04-hotel-main-alb', 'p95', 60))",
+          "label": "p95",
+          "hide": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "",
+          "expression": "MAX(SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"TargetResponseTime\" team04-hotel-main-alb', 'p50', 60))",
+          "label": "p50",
+          "hide": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "정상 · 비정상 대상 수",
+      "description": "eks Target Group 합계. Traefik 파드가 빠지면(재시작 · 노드 축소) 정상 대상이 줄어든다",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "",
+          "expression": "SUM(SEARCH('{AWS/ApplicationELB,LoadBalancer,TargetGroup} MetricName=\"HealthyHostCount\" team04-hotel-main-alb', 'Minimum', 60))",
+          "label": "정상",
+          "hide": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "",
+          "expression": "SUM(SEARCH('{AWS/ApplicationELB,LoadBalancer,TargetGroup} MetricName=\"UnHealthyHostCount\" team04-hotel-main-alb', 'Maximum', 60))",
+          "label": "비정상",
+          "hide": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "활성 연결 · 거부된 연결",
+      "description": "RejectedConnectionCount 는 ALB 가 연결 한도에 닿아 거부한 연결",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "",
+          "expression": "SUM(SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"ActiveConnectionCount\" team04-hotel-main-alb', 'Sum', 60))",
+          "label": "활성 연결",
+          "hide": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "region": "default",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "matchExact": true,
+          "statistic": "Sum",
+          "period": "60",
+          "id": "",
+          "expression": "SUM(SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"RejectedConnectionCount\" team04-hotel-main-alb', 'Sum', 60))",
+          "label": "거부",
+          "hide": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      }
+    },
+    {
+      "type": "row",
+      "title": "Traefik — 진입점 (Prometheus, LDP-228 PodMonitor)",
+      "collapsed": false,
+      "id": 7,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "응답 코드별 요청/초 (엔트리포인트 web)",
+      "description": "백엔드가 없거나(Endpoints 0) 응답하지 못해 Traefik 이 직접 돌려준 502 · 503 도 여기에 잡힌다 (앱 지표에는 없음)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (code) (rate(traefik_entrypoint_requests_total{cluster=\"main\", entrypoint=\"web\"}[$__rate_interval]))",
+          "legendFormat": "{{code}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx 비율 (엔트리포인트 web)",
+      "description": "Traefik 이 돌려준 응답 중 5xx 비율. 앱 응답 5xx 와 Traefik 자체 502 · 503 모두 포함",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(rate(traefik_entrypoint_requests_total{cluster=\"main\", entrypoint=\"web\", code=~\"5..\"}[$__rate_interval])) / sum(rate(traefik_entrypoint_requests_total{cluster=\"main\", entrypoint=\"web\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "5xx 비율",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "서비스별 요청/초",
+      "description": "Traefik 이 넘긴 백엔드 서비스별 (service = <namespace>-<Service>-<port>@kubernetes)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (service) (rate(traefik_service_requests_total{cluster=\"main\"}[$__rate_interval]))",
+          "legendFormat": "{{service}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 10,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 26
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "서비스별 응답 시간 p95",
+      "description": "Traefik 이 백엔드에 넘긴 뒤 응답까지. 앱(api-gateway) p95 와 차이가 크면 Traefik · 네트워크 구간을 의심",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, service) (rate(traefik_service_request_duration_seconds_bucket{cluster=\"main\"}[$__rate_interval])))",
+          "legendFormat": "{{service}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 11,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 26
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "열린 연결 수",
+      "description": "엔트리포인트 · 서비스별 동시 연결",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (entrypoint) (traefik_open_connections{cluster=\"main\"})",
+          "legendFormat": "{{entrypoint}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 12,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Traefik 파드 CPU",
+      "description": "Traefik 은 CPU limit 이 없다. 11-04 부하 테스트 500 요청/초에서 파드당 0.2 ~ 0.3코어",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{cluster=\"main\", namespace=\"traefik\", container!=\"\", container!=\"POD\"}[$__rate_interval]))",
+          "legendFormat": "{{pod}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 13,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      }
+    }
+  ]
+}

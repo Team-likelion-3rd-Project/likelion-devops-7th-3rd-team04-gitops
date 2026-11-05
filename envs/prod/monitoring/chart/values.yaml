@@ -14,3 +14,7 @@ grafanaAdmin:
 
 # dashboards/*.json → ConfigMap dashboard-<파일 이름> (라벨 grafana_dashboard=1, 온프레미스와 같은 이름 · 라벨)
 dashboardLabel: grafana_dashboard
+
+# Traefik 지표 PodMonitor (templates/traefik-podmonitor.yaml). traefik 앱의 namespace 와 같아야 한다
+traefik:
+  namespace: traefik

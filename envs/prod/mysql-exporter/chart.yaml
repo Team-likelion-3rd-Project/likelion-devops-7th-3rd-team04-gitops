@@ -1,5 +1,5 @@
 # prometheus-mysql-exporter — 메인 RDS 의 쿼리 수 · 락 대기 · 슬로우 쿼리 수 등 CloudWatch 에 없는 지표 (LDP-180).
-# 계정 · my.cnf · CA 는 mysql-exporter-setup 앱이 만든다. 토글: 두 앱을 같이 켜고 끈다 (둘 다 enabled: false 가 기본).
+# 계정 · my.cnf · CA 는 mysql-exporter-setup 앱이 만든다. 토글: 두 앱을 같이 켜고 끈다 (LDP-228 부터 둘 다 켬 — EKS 전환 때 빠져 대시보드가 비어 있었음).
 # 결제 RDS 는 Payment VPC 라 메인 클러스터에서 닿지 않아 CloudWatch 지표 · 로그만 본다
 type: helm
 repo: https://prometheus-community.github.io/helm-charts
@@ -7,11 +7,11 @@ chart: prometheus-mysql-exporter
 version: "2.16.0"   # mysqld_exporter v0.21.0
 namespace: monitoring
 release: mysql-exporter
-enabled: false
+enabled: true
 # mysql-exporter-setup(62, 계정 생성 Job) 다음 — 계정이 없으면 mysql_up 0 으로 계속 재시도한다
 order: 65
 # 차트가 memory limit 을 env GOMEMLIMIT(resourceFieldRef, divisor 없음)로 넣는데 API 서버가 divisor: "0" 을 채워
 # 기본 diff 로는 영구 OutOfSync → root 가 이 wave 를 기다리다 시간 제한으로 실패한다 (2026-10-29). API 서버 기준으로 비교
 compareOptions: ServerSideDiff=true
 # setup 과 같은 클러스터
-clusters: [kubeadm]
+clusters: [eks]
