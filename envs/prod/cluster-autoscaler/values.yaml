@@ -1,0 +1,42 @@
+# cluster-autoscaler chart values (prod EKS, LDP-227)
+#
+# 노드 그룹은 ASG 태그로 찾는다 (k8s.io/cluster-autoscaler/enabled · k8s.io/cluster-autoscaler/<클러스터 이름>, MNG 가 붙임).
+# Autoscaler 는 CPU 사용률이 아니라 requests 로 자리를 계산한다 — 부하에 따라 노드가 늘려면 HPA 가 Pod 를 늘리고 그 Pod 가 Pending 이어야 한다
+cloudProvider: aws
+awsRegion: us-east-1
+autoDiscovery:
+  clusterName: team04-hotel-main-eks   # 72 cluster_name
+
+rbac:
+  serviceAccount:
+    name: cluster-autoscaler   # 72 Pod Identity Association 과 같아야 함
+
+extraArgs:
+  logtostderr: true
+  stderrthreshold: info
+  v: 2
+  # 노드를 고를 때 남는 CPU · 메모리가 가장 적은 그룹 (지금은 노드 그룹 1개)
+  expander: least-waste
+  balance-similar-node-groups: true
+  # kube-system Pod(coredns 등)가 있는 노드도 줄일 수 있게 한다. 줄이면 안 되는 Pod 는 safe-to-evict: "false" 로 막는다
+  skip-nodes-with-system-pods: false
+  # 증설 뒤 10분, 남는 상태 10분이 지나야 줄인다 (부하 테스트 단계 사이에 노드가 오르내리지 않게)
+  scale-down-delay-after-add: 10m
+  scale-down-unneeded-time: 10m
+  # 축소 후보 노드에 PreferNoSchedule taint(DeletionCandidateOfClusterAutoscaler)를 붙이지 않는다. 붙이면 막 늘어난 빈 노드를
+  # 스케줄러가 피해서 HPA 가 늘린 Pod 가 포화된 기존 노드로 가고, 빈 노드는 그대로 축소된다 (11-04 검증)
+  max-bulk-soft-taint-count: 0
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+# kube-prometheus-stack 은 모든 ServiceMonitor 를 고른다 (serviceMonitorSelectorNilUsesHelmValues: false)
+serviceMonitor:
+  enabled: true
+  namespace: kube-system
+  interval: 30s
+  selector: {}

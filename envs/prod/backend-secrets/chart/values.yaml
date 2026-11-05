@@ -38,6 +38,11 @@ seedAdmin:
     SEED_ADMIN_EMAIL: email
     SEED_ADMIN_PASSWORD: password
     SEED_ADMIN_NAME: name
+    # 지점 관리자 · 직원 계정 비밀번호 (LDP-221). 12-secrets 에 속성을 넣기 전에 반영하면 이 ExternalSecret 전체가 동기화에 실패한다
+    SEED_SEOUL_MANAGER_PASSWORD: seoul_manager_password
+    SEED_BUSAN_MANAGER_PASSWORD: busan_manager_password
+    SEED_JEJU_MANAGER_PASSWORD: jeju_manager_password
+    SEED_SEOUL_STAFF_PASSWORD: seoul_staff_password
 
 # Flyway(backend migrations.main.db.caConfigMap) 가 RDS 서버 인증서를 검증하는 CA 묶음.
 # 공개 인증서다: https://truststore.pki.rds.amazonaws.com/us-east-1/us-east-1-bundle.pem (Root CA RSA2048 · RSA4096 · ECC384 G1)

@@ -1,0 +1,12 @@
+# Cluster Autoscaler — 자리가 없어 Pending 인 Pod 가 생기면 워커 노드 그룹을 늘리고, 남는 노드는 줄인다 (LDP-227).
+# 노드 수 범위는 Terraform 72 node_min_size ~ node_max_size (2 ~ 4). AWS 권한은 Pod Identity (72, 이 클러스터 소유 태그 ASG 로 제한)
+# 차트 버전은 클러스터 Kubernetes 마이너 버전(1.35)과 같은 Autoscaler 를 고른다 — 72 kubernetes_version 을 올리면 같이 올린다
+type: helm
+repo: https://kubernetes.github.io/autoscaler
+chart: cluster-autoscaler
+version: "9.59.0"   # cluster-autoscaler v1.35.0
+namespace: kube-system
+release: cluster-autoscaler
+clusters: [eks]
+# 앱보다 먼저 떠서 첫 sync 의 Pending 도 처리한다. ServiceMonitor CRD 는 prometheus-operator-crds(12)
+order: 18
