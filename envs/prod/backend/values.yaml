@@ -96,8 +96,6 @@ services:
       IMAGE_BASE_URL: "https://meomulm.click"
       # 조회 캐시 Valkey(REDIS_HOST · REDIS_PASSWORD 는 차트 기본 secretEnv). ElastiCache 는 전송 암호화 required (41-main-data)
       REDIS_TLS: "true"
-      # 부하 테스트 2일차 1단계 — 조회 캐시 끔으로 시작 (load-test/README 「조회 캐시 on/off 비교」)
-      READ_CACHE_ENABLED: "false"
   auth-service:
     env:
       # ElastiCache Valkey 는 전송 암호화 required (41-main-data)
