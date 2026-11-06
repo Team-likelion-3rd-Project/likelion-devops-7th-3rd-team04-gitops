@@ -108,11 +108,21 @@ prometheus:
     # 클러스터가 하루를 넘기지 않음. 시간 · 용량 중 먼저 닿는 쪽으로 지움 (용량은 emptyDir 상한보다 작게)
     retention: 2d
     retentionSize: 3GB
-    # 노드 루트 볼륨(30GiB)을 이미지 · 로그와 나눠 씀. 상한을 넘으면 kubelet 이 파드를 축출한다
+    # 부하 테스트 3차(11-06) — emptyDir 는 Pod 가 옮겨지면 그날 지표가 모두 사라진다 (11-04 노드 축소, 11-06 ASG AZRebalance 가
+    # Prometheus 노드 종료 → 5시간 소실). EBS(gp2)에 둬서 Pod 가 옮겨져도 유지. 매일 destroy 와 함께 지워지도록 아래 보존 정책 Delete
     storageSpec:
-      emptyDir:
-        sizeLimit: 5Gi
-    # emptyDir 라 Pod 가 옮겨지면 그날 지표가 모두 사라진다 (11-04 노드 축소 때 발생). Cluster Autoscaler 가 축소할 노드로 고르지 않게 한다 (LDP-227)
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp2
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 10Gi
+    persistentVolumeClaimRetentionPolicy:
+      whenDeleted: Delete
+      whenScaled: Retain
+    # Cluster Autoscaler 가 축소할 노드로 고르지 않게 한다 (LDP-227). EBS 는 가용 영역에 묶여 있어, 옮겨질 때 같은 영역 노드에
+    # 자리가 없으면 Pending 이 된다 — 데이터는 PVC 가 지키므로 이동만 막는다 (AZRebalance · 수동 종료는 이 설정으로 못 막음)
     podMetadata:
       annotations:
         cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
@@ -131,6 +141,10 @@ alertmanager:
   serviceAccount:
     name: kube-prometheus-stack-alertmanager   # IRSA 매핑 · 51-pod-roles 신뢰 정책 sub 와 같아야 함
   alertmanagerSpec:
+    # 부하 테스트 3차 — emptyDir(알림 묶음 · silence 상태)라 Cluster Autoscaler 가 이 노드를 축소하지 못했다. 매일 재생성이라 잃는 상태가 작음
+    podMetadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
     resources:
       requests:
         cpu: 20m

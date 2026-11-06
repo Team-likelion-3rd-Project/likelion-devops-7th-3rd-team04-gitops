@@ -108,6 +108,10 @@ spec:
 backoffLimit: 0
 activeDeadlineSeconds: 300
 template:
+  metadata:
+    # 부하 테스트 3차 — 1분마다 아무 노드에나 뜨고 emptyDir 를 써서 Cluster Autoscaler 축소를 막았다. 끊겨도 다음 실행이 다시 확인한다
+    annotations:
+      cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
   spec:
     serviceAccountName: deploy-notify
     restartPolicy: Never

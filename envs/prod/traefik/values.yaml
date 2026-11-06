@@ -5,6 +5,11 @@
 deployment:
   replicas: 2
 
+# 부하 테스트 3차 — 노드 drain · Cluster Autoscaler 축소 때 2개가 한꺼번에 내려가지 않게 (eviction 만 해당, 롤링 업데이트는 별도)
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
 # 부하 테스트 2일차 ② — 300 요청/초에서 Pod 당 0.16 코어, 메모리 최대 265Mi. requests 가 없으면 노드 CPU 경합 때 가장 먼저 밀린다
 # CPU limit 는 두지 않는다 (Go 런타임 · 순간 처리량, throttling 방지)
 resources:
