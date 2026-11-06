@@ -53,7 +53,8 @@ services:
     hpa:
       enabled: true
       minReplicas: 2
-      maxReplicas: 4
+      # 부하 테스트 3일차 ② — 600 요청/초에서 약 9개 (Pod 당 ~70 요청/초 확장). DB 를 쓰지 않아 RDS 연결과 무관
+      maxReplicas: 10
       cpuUtilization: 70
     env:
       # 프론트(13-frontend) 출처. 하나만 허용하므로 www 는 CloudFront 에서 루트로 리다이렉트
@@ -70,7 +71,12 @@ services:
       # 부하 테스트 브랜치 전용 — k6 는 생성기 IP 하나에서 보낸다. 1분 기준이라 stress 상한 500 요청/초 = 30,000 (기본 100)
       THROTTLE_LIMIT: "30000"
   booking-service:
-    replicas: 2
+    # 부하 테스트 3일차 ② — HPA 2~3. 풀 Pod 당 10 → 최대 30 연결 (RDS medium max_connections 151)
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 3
+      cpuUtilization: 70
     # 부하 테스트 2일차 — 결제 확정 40회/초에서 limit 500m throttling 81~93% → 풀 고갈 (노드 여유와 무관). limit 만 올려 효과 확인
     resources:
       requests: {cpu: 200m, memory: 128Mi}
@@ -86,10 +92,16 @@ services:
   hotel-service:
     # 호텔 조회를 모두 받는다. Pod 1개 · 커넥션 풀 10 에서 대기 413, 250 요청/초 throttling 57~63%.
     # 풀이 Pod 당 10 이라 replica 를 늘리면 RDS 연결(max_connections 68)도 10 씩 는다 — HPA 는 풀 조정 뒤에
-    replicas: 2
+    # 부하 테스트 2일차 ② — 캐시 켬 · 300 요청/초 기준 Pod 당 0.23 → requests 250m
+    # 부하 테스트 3일차 ② — RDS medium(max_connections 151)이라 HPA 2~3 (최대 30 연결)
     resources:
-      requests: {cpu: 300m, memory: 128Mi}
+      requests: {cpu: 250m, memory: 128Mi}
       limits: {cpu: 1000m, memory: 512Mi}
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 3
+      cpuUtilization: 70
     env:
       # 객실 사진 버킷 (13-frontend). 엔드포인트 · 키를 비우면 AWS 기본 주소 + IRSA(team04-hotel-hotel-service)
       S3_BUCKET: team04-hotel-room-images
@@ -102,6 +114,15 @@ services:
       # 조회 캐시 Valkey(REDIS_HOST · REDIS_PASSWORD 는 차트 기본 secretEnv). ElastiCache 는 전송 암호화 required (41-main-data)
       REDIS_TLS: "true"
   auth-service:
+    # 부하 테스트 3일차 ② — 2일차 로그인 단독 limit 500m 에서 약 5건/초 (bcrypt CPU). limit 1코어 + HPA 1~2 (60%, 최대 20 연결)
+    resources:
+      requests: {cpu: 200m, memory: 128Mi}
+      limits: {cpu: 1000m, memory: 512Mi}
+    hpa:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 2
+      cpuUtilization: 60
     env:
       # ElastiCache Valkey 는 전송 암호화 required (41-main-data)
       REDIS_TLS: "true"
@@ -134,6 +155,10 @@ services:
   # 챗봇 답변 (chat-bot-service → n8n → llm-service → Vertex AI). 이미지 태그는 global.imageTag
   llm-service:
     enabled: true
+    # 부하 테스트 2일차 ② — 실사용 0.002 코어 · 메모리 최대 85Mi
+    resources:
+      requests: {cpu: 50m, memory: 256Mi}
+      limits: {cpu: 500m, memory: 768Mi}
     # GCP 서비스 계정 키를 쓰지 않는다 — 아래 gcpWorkloadIdentity 로 인증
     secretEnv: []
     gcpWorkloadIdentity: true
@@ -165,6 +190,10 @@ migrations:
 # owner 비밀번호(워크플로 활성화용 내부 계정)는 backend-secrets 의 N8N_INIT_OWNER_PASSWORD (41-main-data, 매일 새 값)
 n8n:
   enabled: true
+  # 부하 테스트 2일차 ② — 실사용 0.002 코어, 메모리 최대 366Mi (requests 256Mi 초과)
+  resources:
+    requests: {cpu: 50m, memory: 384Mi}
+    limits: {cpu: 500m, memory: 1Gi}
 # GCP Workload Identity Federation (Terraform 14-gcp-llm 🔒 output, 모두 공개 값 — 키 없음)
 #   llm-service · llm-ingest 파드 projected 토큰 → STS → llm-service-prod impersonate → Vertex AI
 gcpWorkloadIdentity:

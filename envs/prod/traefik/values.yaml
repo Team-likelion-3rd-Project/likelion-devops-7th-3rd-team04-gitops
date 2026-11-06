@@ -5,6 +5,12 @@
 deployment:
   replicas: 2
 
+# 부하 테스트 2일차 ② — 300 요청/초에서 Pod 당 0.16 코어, 메모리 최대 265Mi. requests 가 없으면 노드 CPU 경합 때 가장 먼저 밀린다
+# CPU limit 는 두지 않는다 (Go 런타임 · 순간 처리량, throttling 방지)
+resources:
+  requests: {cpu: 200m, memory: 300Mi}
+  limits: {memory: 512Mi}
+
 # 부하 테스트 2일차 ②' — 노드마다 1개. 2개가 한 노드(또는 포화된 기존 노드)에 몰리면 모든 요청의 입구가 같이 밀린다
 topologySpreadConstraints:
   - maxSkew: 1
