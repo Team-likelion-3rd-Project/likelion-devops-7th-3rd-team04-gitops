@@ -36,6 +36,9 @@ metrics:
 # 같은 서비스 Pod 를 노드마다 나눈다 (LDP-227) — 11-04 부하 테스트에서 한 노드에 gateway · hotel · booking 이 몰려 그 노드만 먼저 포화
 topologySpread:
   enabled: true
+  # 부하 테스트 2일차 ②' — 필수로. ScheduleAnyway 는 롤아웃 · HPA 때 빈자리 있는 노드로 몰림 (11-05 gateway · hotel 2개 한 노드 3회,
+  # load 350 노드 CPU 79~87% vs 23~26% → p95 334ms, 손 재배치만으로 168ms). 못 지키면 Pending → Cluster Autoscaler 가 노드 증설
+  whenUnsatisfiable: DoNotSchedule
 # resources · HPA (LDP-227) — 11-04 부하 테스트 노드 2대 기준. requests 합계가 노드 2대 할당량(3.86코어) 안에 들어가고,
 # HPA 가 늘린 Pod 가 자리가 없으면 Cluster Autoscaler 가 노드를 늘린다. 기준선(50m / 500m) 대비 SLO 유지 최대 ~150 → ~250 요청/초
 services:
@@ -64,8 +67,14 @@ services:
       AUTH_SERVICE_HOST: "dns:///auth-service-headless:3006"
       # 결제 서버는 결제 VPC — 메인 VPC 의 PrivateLink 엔드포인트 고정 이름으로 호출 (Terraform 71-payment-link, 재생성해도 같음)
       PAYMENT_SERVICE_HOST: "payment.team04-hotel.internal:3004"
+      # 부하 테스트 브랜치 전용 — k6 는 생성기 IP 하나에서 보낸다. 1분 기준이라 stress 상한 500 요청/초 = 30,000 (기본 100)
+      THROTTLE_LIMIT: "30000"
   booking-service:
     replicas: 2
+    # 부하 테스트 2일차 — 결제 확정 40회/초에서 limit 500m throttling 81~93% → 풀 고갈 (노드 여유와 무관). limit 만 올려 효과 확인
+    resources:
+      requests: {cpu: 200m, memory: 128Mi}
+      limits: {cpu: 1000m, memory: 512Mi}
     env:
       HOTEL_SERVICE_HOST: "dns:///hotel-service-headless:3002" # LDP-160
       # 결제 서버 gRPC (PrivateLink, Terraform 71-payment-link)
@@ -96,6 +105,8 @@ services:
     env:
       # ElastiCache Valkey 는 전송 암호화 required (41-main-data)
       REDIS_TLS: "true"
+      # 부하 테스트 브랜치 전용 — k6 setup 토큰이 soak(45분) · 하루 테스트 동안 만료되지 않게 (기본 15m)
+      JWT_ACCESS_EXPIRES_IN: "2h"
       # LDP-160 (api-gateway 주석 참고)
       USER_SERVICE_HOST: "dns:///user-service-headless:3001"
       BOOKING_SERVICE_HOST: "dns:///booking-service-headless:3003"
