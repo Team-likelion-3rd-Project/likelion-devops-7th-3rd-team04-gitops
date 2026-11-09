@@ -1,0 +1,17 @@
+# metrics-server values — 72 EKS 만 (values.yaml 위에 더한다).
+# HPA 가 이 값을 보고 판단한다. 1개면 그 노드가 줄어드는 순간 모든 HPA 가 잠깐 지표를 못 받고, platform 1대에 두면 그 노드 장애 때
+# 모든 HPA 가 멈춘다 → 앱 노드에 2개, 가용 영역에 나눠 둔다 (LDP-248). platform taint 를 허용하지 않아 앱 노드에만 뜬다
+replicas: 2
+
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    nodeTaintsPolicy: Honor
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: metrics-server

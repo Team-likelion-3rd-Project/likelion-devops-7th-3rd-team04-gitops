@@ -1,6 +1,63 @@
 # kube-prometheus-stack values — 72 EKS 만. 같은 알림이 두 번 오지 않도록 병행 기간 동안 70 만 발행한다.
 # 트래픽을 옮긴 뒤(LDP-202) 72 enable_singleton_workloads 가 root appValues 로 sns-alerts 를 넘긴다. 알림 규칙 · 하위 route 는 values.yaml 그대로
+#
+# 모니터링 구성 요소는 platform 노드에 (Terraform 72 nodes.tf platform 노드 그룹의 label · taint, LDP-248).
+# Prometheus EBS(PVC)는 platform 노드 영역(platform_az)에 생긴다. node-exporter 는 차트 기본값이 모든 NoSchedule taint 를 허용해 모든 노드에 뜬다
 alertmanager:
   config:
     route:
       receiver: "null"
+  alertmanagerSpec:
+    nodeSelector:
+      role: platform
+    tolerations:
+      - key: dedicated
+        operator: Equal
+        value: platform
+        effect: NoSchedule
+
+prometheus:
+  prometheusSpec:
+    nodeSelector:
+      role: platform
+    tolerations:
+      - key: dedicated
+        operator: Equal
+        value: platform
+        effect: NoSchedule
+
+prometheusOperator:
+  nodeSelector:
+    role: platform
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: platform
+      effect: NoSchedule
+  admissionWebhooks:
+    patch:
+      nodeSelector:
+        role: platform
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: platform
+          effect: NoSchedule
+
+kube-state-metrics:
+  nodeSelector:
+    role: platform
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: platform
+      effect: NoSchedule
+
+grafana:
+  nodeSelector:
+    role: platform
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: platform
+      effect: NoSchedule

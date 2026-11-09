@@ -1,0 +1,9 @@
+# cluster-autoscaler values — 72 EKS 만 (values.yaml 위에 더한다).
+# 운영 도구는 platform 노드에 (Terraform 72 nodes.tf platform 노드 그룹의 label · taint 와 같은 값, LDP-248)
+nodeSelector:
+  role: platform
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: platform
+    effect: NoSchedule
