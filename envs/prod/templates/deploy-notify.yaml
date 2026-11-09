@@ -108,9 +108,23 @@ spec:
 backoffLimit: 0
 activeDeadlineSeconds: 300
 template:
+  metadata:
+    # 부하 테스트 3차 — 1분마다 아무 노드에나 뜨고 emptyDir 를 써서 Cluster Autoscaler 축소를 막았다. 끊겨도 다음 실행이 다시 확인한다
+    annotations:
+      cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
   spec:
     serviceAccountName: deploy-notify
     restartPolicy: Never
+    {{- if eq $.Values.cluster "eks" }}
+    # 운영 도구라 platform 노드에 (Terraform 72 nodes.tf, LDP-248) — 1분마다 아무 앱 노드에나 떠서 축소 판단에 끼지 않게
+    nodeSelector:
+      role: platform
+    tolerations:
+      - key: dedicated
+        operator: Equal
+        value: platform
+        effect: NoSchedule
+    {{- end }}
     securityContext:
       runAsNonRoot: true
       runAsUser: 65534

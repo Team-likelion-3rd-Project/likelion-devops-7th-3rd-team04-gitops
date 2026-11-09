@@ -1,5 +1,6 @@
 # Cluster Autoscaler — 자리가 없어 Pending 인 Pod 가 생기면 워커 노드 그룹을 늘리고, 남는 노드는 줄인다 (LDP-227).
-# 노드 수 범위는 Terraform 72 node_min_size ~ node_max_size (2 ~ 4). AWS 권한은 Pod Identity (72, 이 클러스터 소유 태그 ASG 로 제한)
+# 대상은 가용 영역별 앱 노드 그룹 app-<영역> (Terraform 72 app_node_min_per_az ~ app_node_max_per_az, 영역당 1 ~ 3, LDP-248).
+# platform 노드 그룹은 min = max = 1 이라 늘리거나 줄이지 않는다. AWS 권한은 Pod Identity (72, 이 클러스터 소유 태그 ASG 로 제한)
 # 차트 버전은 클러스터 Kubernetes 마이너 버전(1.35)과 같은 Autoscaler 를 고른다 — 72 kubernetes_version 을 올리면 같이 올린다
 type: helm
 repo: https://kubernetes.github.io/autoscaler

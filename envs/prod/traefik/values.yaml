@@ -5,6 +5,27 @@
 deployment:
   replicas: 2
 
+# 노드마다 1개 (LDP-237). 모든 요청의 입구라 2개가 한 노드 · 포화된 노드에 몰리면 전체가 같이 밀린다
+# (11-05 load 350: 지연이 traefik → gateway 처리 시작 전 구간에서 발생, 분산 후 p95 334 → 64ms).
+# 노드가 1대뿐이면 2번째 Pod 는 Pending → Cluster Autoscaler 증설. 롤아웃 중 옛 Pod 는 세지 않는다 (pod-template-hash)
+# platform 노드(taint, LDP-248)는 계산에서 뺀다 — 기본값(Ignore)이면 Pod 를 놓을 수 없는 platform 노드가
+# "0개인 노드"로 세어져, 앱 노드마다 1개씩 있어도 더 놓을 곳이 없다고 판단한다
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    nodeTaintsPolicy: Honor
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: traefik
+        app.kubernetes.io/instance: traefik-traefik
+    matchLabelKeys: [pod-template-hash]
+
+# 노드 drain · Cluster Autoscaler 축소 때 2개가 한꺼번에 내려가지 않게 (eviction 만 해당, 롤링 업데이트는 별도, LDP-248)
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
 ingressClass:
   enabled: true
   isDefaultClass: false

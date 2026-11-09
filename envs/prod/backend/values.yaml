@@ -13,7 +13,7 @@ global:
   imageRegistry: "{{ .Values.global.awsAccountId }}.dkr.ecr.us-east-1.amazonaws.com"
   imageRepositoryPrefix: team04-hotel/
   # 커밋 SHA (latest 금지 — 차트가 렌더링을 거부, ECR 도 IMMUTABLE)
-  imageTag: "41b696f257dd402d30974e7425366913a80b7f33" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
+  imageTag: "77a0ec6afa3086e0cf6101e5a8498277b1937875" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
   # 워커 kubelet 이 노드 Role 로 ECR pull (ecr-credential-provider, Ansible aws_ecr_credential_provider) → imagePullSecret 불필요
   imagePullSecrets: []
   secretName: backend-secrets
@@ -34,8 +34,12 @@ ingress:
 metrics:
   enabled: true
 # 같은 서비스 Pod 를 노드마다 나눈다 (LDP-227) — 11-04 부하 테스트에서 한 노드에 gateway · hotel · booking 이 몰려 그 노드만 먼저 포화
+# 필수 규칙 (LDP-237) — 차트 기본 ScheduleAnyway 는 자리가 없으면 규칙을 무시해 롤아웃 · HPA 때 한 노드에 몰렸다 (11-05 3회).
+# 11-05 load 350 요청/초 × 15분: 쏠림 p95 334ms(실패) → DoNotSchedule + traefik 분산 64ms.
+# 못 지키면 Pending → Cluster Autoscaler 가 노드를 늘린다. 노드 그룹 max 에 닿으면 롤아웃 surge Pod 가 Pending 으로 남을 수 있다
 topologySpread:
   enabled: true
+  whenUnsatisfiable: DoNotSchedule
 # resources · HPA (LDP-227) — 11-04 부하 테스트 노드 2대 기준. requests 합계가 노드 2대 할당량(3.86코어) 안에 들어가고,
 # HPA 가 늘린 Pod 가 자리가 없으면 Cluster Autoscaler 가 노드를 늘린다. 기준선(50m / 500m) 대비 SLO 유지 최대 ~150 → ~250 요청/초
 services:

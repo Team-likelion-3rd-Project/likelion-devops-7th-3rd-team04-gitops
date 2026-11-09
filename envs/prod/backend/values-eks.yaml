@@ -14,3 +14,40 @@ seed:
 gcpWorkloadIdentity:
   provider: aws
   audience: "//iam.googleapis.com/projects/1066485667715/locations/global/workloadIdentityPools/team04-hotel-prod/providers/main-cluster-aws"
+
+# ── 노드 그룹 성격별 분리 (LDP-248) ──
+# platform 노드(taint dedicated=platform)는 분산 계산에서 뺀다 — 기본값(Ignore)이면 Pod 를 놓을 수 없는 platform 노드가
+# "0개인 노드"로 세어져, 앱 노드마다 1개씩 있어도 확장 Pod 를 놓을 곳이 없다고 판단한다 (3차 gateway Pending 과 같은 경로)
+topologySpread:
+  nodeTaintsPolicy: Honor
+
+# 2개 이상 뜨는 서비스에 PDB (maxUnavailable 1). 노드 drain · Cluster Autoscaler 축소 때 한꺼번에 내려가지 않게
+pdb:
+  enabled: true
+
+# 챗봇은 HPA 없는 1개 고정 · 예약 경로 밖 · 실사용이 작아 platform 노드에 둔다 (앱 노드는 확장 대상 서비스만)
+services:
+  chat-bot-service:
+    nodeSelector:
+      role: platform
+    tolerations:
+      - key: dedicated
+        operator: Equal
+        value: platform
+        effect: NoSchedule
+  llm-service:
+    nodeSelector:
+      role: platform
+    tolerations:
+      - key: dedicated
+        operator: Equal
+        value: platform
+        effect: NoSchedule
+n8n:
+  nodeSelector:
+    role: platform
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: platform
+      effect: NoSchedule
