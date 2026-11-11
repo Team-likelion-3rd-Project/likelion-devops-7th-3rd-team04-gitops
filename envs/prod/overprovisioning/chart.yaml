@@ -1,0 +1,9 @@
+# 오버프로비저닝 — 우선순위 -1 자리 맡기 Pod 로 노드에 빈자리를 항상 남긴다 (Cluster Autoscaler FAQ 의 표준 방식)
+# HPA 가 늘린 Pod 는 이 Pod 를 밀어내고 바로 배치되고, 밀려난 이 Pod 가 Pending 이 되어 CA 가 다음 노드를 미리 띄운다
+type: local
+path: chart   # 이 폴더 기준
+namespace: overprovisioning
+release: overprovisioning
+clusters: [eks]
+# Cluster Autoscaler(18) 다음
+order: 19

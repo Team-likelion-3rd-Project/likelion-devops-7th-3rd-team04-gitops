@@ -4,6 +4,39 @@
 # externalTrafficPolicy Cluster 를 쓴다 (앞단 ALB 가 출발지라 Local 로 클라이언트 IP 를 보존할 이유가 없다)
 deployment:
   replicas: 2
+  # Cluster Autoscaler 가 이 Pod 가 있는 노드도 줄일 수 있게 한다. 차트가 /data · /tmp 를 emptyDir 로 붙여 "local storage" 로
+  # 분류되면 CA 가 노드 축소를 건너뛴다 (4차 CA 로그 `pod with local storage present`). 보존할 데이터 없음 (LDP-259)
+  podAnnotations:
+    cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+
+# HPA 2~4 (LDP-259) — 모든 요청의 입구라 부하에 비례해 CPU 를 쓴다 (4차 1,000 요청/초 Pod 당 0.36 → 4개면 약 0.18).
+# 고정 4개는 평소 requests +600m 로 앱 노드가 1대 늘어 평소 2개 · 부하 때만 확장 (requests 300m 의 70%). HPA 를 켜면 replicas 는 무시된다
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+# hotel · booking 이 없는 노드 우선 (preferred — 자리가 없으면 그래도 배치, Pending 없음, LDP-259).
+# traefik · hotel · booking 이 한 노드에 겹치면 그 노드가 먼저 100% (4차: 같은 부하에서 gateway 만 있는 노드는 45–50%)
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          topologyKey: kubernetes.io/hostname
+          namespaces: [backend]
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: [hotel-service, booking-service]
 
 # 노드마다 1개 (LDP-237). 모든 요청의 입구라 2개가 한 노드 · 포화된 노드에 몰리면 전체가 같이 밀린다
 # (11-05 load 350: 지연이 traefik → gateway 처리 시작 전 구간에서 발생, 분산 후 p95 334 → 64ms).
@@ -20,6 +53,11 @@ topologySpreadConstraints:
         app.kubernetes.io/name: traefik
         app.kubernetes.io/instance: traefik-traefik
     matchLabelKeys: [pod-template-hash]
+
+# requests 가 없으면 스케줄러가 0 으로 계산해 hotel · booking 과 같은 노드에 과밀 배치된다 (4차 stress 1회차 붕괴 원인, LDP-259).
+# 4차 실사용 Pod 당 0.27–0.36 코어 · 메모리 최대 808Mi. limit 은 두지 않음 (입구라 throttling · OOM 이 전체 장애)
+resources:
+  requests: { cpu: 300m, memory: 256Mi }
 
 # 노드 drain · Cluster Autoscaler 축소 때 2개가 한꺼번에 내려가지 않게 (eviction 만 해당, 롤링 업데이트는 별도, LDP-248)
 podDisruptionBudget:

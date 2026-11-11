@@ -13,7 +13,7 @@ global:
   imageRegistry: "{{ .Values.global.awsAccountId }}.dkr.ecr.us-east-1.amazonaws.com"
   imageRepositoryPrefix: team04-hotel/
   # 커밋 SHA (latest 금지 — 차트가 렌더링을 거부, ECR 도 IMMUTABLE)
-  imageTag: "77a0ec6afa3086e0cf6101e5a8498277b1937875" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
+  imageTag: "794f5265ade7a73708cfbe4829d26365e2a89ea8" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
   # 워커 kubelet 이 노드 Role 로 ECR pull (ecr-credential-provider, Ansible aws_ecr_credential_provider) → imagePullSecret 불필요
   imagePullSecrets: []
   secretName: backend-secrets
@@ -40,8 +40,9 @@ metrics:
 topologySpread:
   enabled: true
   whenUnsatisfiable: DoNotSchedule
-# resources · HPA (LDP-227) — 11-04 부하 테스트 노드 2대 기준. requests 합계가 노드 2대 할당량(3.86코어) 안에 들어가고,
-# HPA 가 늘린 Pod 가 자리가 없으면 Cluster Autoscaler 가 노드를 늘린다. 기준선(50m / 500m) 대비 SLO 유지 최대 ~150 → ~250 요청/초
+# resources · HPA (LDP-227 → LDP-259) — 부하 테스트 4차(11-09) 최종 구성. requests 는 고부하 실사용에 맞춘다:
+# 실사용보다 작으면 스케줄러가 한 노드에 과밀 배치해 그 노드만 CPU 100% (4차 stress 1회차: 650 요청/초에서 붕괴).
+# HPA 가 늘린 Pod 가 자리가 없으면 Cluster Autoscaler 가 노드를 늘린다. 4차 최종 구성 stress 1,000 요청/초 조회 p95 172ms
 services:
   api-gateway:
     # 모든 요청이 거친다. 200 요청/초에서 limit 500m 에 걸려 throttling 37~40%. DB 를 쓰지 않아 늘려도 RDS 연결 상한과 무관
@@ -53,8 +54,11 @@ services:
       limits: {cpu: 1000m, memory: 512Mi}
     hpa:
       enabled: true
-      minReplicas: 2
-      maxReplicas: 4
+      # 4 — 2개로 시작하면 급증 때 포화 → readiness 실패로 서비스에서 빠지고, HPA 는 unready Pod 를 0% 로 계산해 확장이 늦다
+      # (4차 load 800: 시작 7분 p95 최대 24초 → min 4 에서 2분 · 약 1초, spike 50 → 450 직후 30초 p95 667 → 111ms). 평소 노드 +1대
+      minReplicas: 4
+      # 14 — 1,000 요청/초에서 10개 · 사용률 84%(목표 70) 로 10 에 걸림. DB 를 쓰지 않아 RDS 연결과 무관
+      maxReplicas: 14
       cpuUtilization: 70
     env:
       # 프론트(13-frontend) 출처. 하나만 허용하므로 www 는 CloudFront 에서 루트로 리다이렉트
@@ -69,7 +73,28 @@ services:
       # 결제 서버는 결제 VPC — 메인 VPC 의 PrivateLink 엔드포인트 고정 이름으로 호출 (Terraform 71-payment-link, 재생성해도 같음)
       PAYMENT_SERVICE_HOST: "payment.team04-hotel.internal:3004"
   booking-service:
-    replicas: 2
+    # HPA 2~3 — 풀 Pod 당 10 → 최대 30 연결 (RDS medium max_connections 151, 4차 최대 77)
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 3
+      cpuUtilization: 70
+    # 4차 1,000 요청/초 실사용 Pod 당 0.28–0.32
+    resources:
+      requests: {cpu: 300m, memory: 128Mi}
+      limits: {cpu: 1000m, memory: 512Mi}
+    # hotel · traefik 이 없는 노드 우선 (preferred — 자리가 없으면 그래도 배치, Pending 없음). 같은 서비스끼리는 topologySpread 가 나누지만
+    # 다른 서비스와의 동거는 못 막는다 — 4차에서 HPA 가 늘린 hotel · booking 3번째가 같은 새 노드에 놓여 그 노드만 99%
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              namespaceSelector: {}
+              labelSelector:
+                matchExpressions:
+                  - {key: app.kubernetes.io/name, operator: In, values: [hotel-service, traefik]}
     env:
       HOTEL_SERVICE_HOST: "dns:///hotel-service-headless:3002" # LDP-160
       # 결제 서버 gRPC (PrivateLink, Terraform 71-payment-link)
@@ -80,11 +105,27 @@ services:
       PAYMENT_RESULT_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/{{ .Values.global.awsAccountId }}/payment-result.fifo"
   hotel-service:
     # 호텔 조회를 모두 받는다. Pod 1개 · 커넥션 풀 10 에서 대기 413, 250 요청/초 throttling 57~63%.
-    # 풀이 Pod 당 10 이라 replica 를 늘리면 RDS 연결(max_connections 68)도 10 씩 는다 — HPA 는 풀 조정 뒤에
-    replicas: 2
+    # 풀이 Pod 당 10 이라 replica 를 늘리면 RDS 연결도 10 씩 는다 — HPA 2~3 (최대 30 연결, RDS medium max_connections 151)
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 3
+      cpuUtilization: 70
+    # 4차 1,000 요청/초 실사용 Pod 당 0.32–0.45 (캐시 켬)
     resources:
-      requests: {cpu: 300m, memory: 128Mi}
+      requests: {cpu: 350m, memory: 128Mi}
       limits: {cpu: 1000m, memory: 512Mi}
+    # booking · traefik 이 없는 노드 우선 (booking-service 주석 참고)
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              namespaceSelector: {}
+              labelSelector:
+                matchExpressions:
+                  - {key: app.kubernetes.io/name, operator: In, values: [booking-service, traefik]}
     env:
       # 객실 사진 버킷 (13-frontend). 엔드포인트 · 키를 비우면 AWS 기본 주소 + IRSA(team04-hotel-hotel-service)
       S3_BUCKET: team04-hotel-room-images
@@ -97,6 +138,16 @@ services:
       # 조회 캐시 Valkey(REDIS_HOST · REDIS_PASSWORD 는 차트 기본 secretEnv). ElastiCache 는 전송 암호화 required (41-main-data)
       REDIS_TLS: "true"
   auth-service:
+    # 로그인(bcrypt)이 CPU 를 쓴다 — 로그인당 약 0.1코어. HPA 2~5: 4차 실측 25건/초 안정(p95 ~380ms), 5개면 약 48건/초에서 포화.
+    # 이벤트처럼 50건/초 이상이 예상되면 미리 늘린다. 풀 Pod 당 10 → 최대 50 연결
+    resources:
+      requests: {cpu: 200m, memory: 128Mi}
+      limits: {cpu: 1000m, memory: 512Mi}
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+      cpuUtilization: 60
     env:
       # ElastiCache Valkey 는 전송 암호화 required (41-main-data)
       REDIS_TLS: "true"

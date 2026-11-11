@@ -1,5 +1,6 @@
 # external-secrets values — 72 EKS 만 (values.yaml 위에 더한다).
 # 운영 도구는 platform 노드에 (Terraform 72 nodes.tf platform 노드 그룹의 label · taint 와 같은 값, LDP-248)
+# 구성 요소마다 2개 · 영역마다 1개 (platform-a · platform-b, LDP-259) — 한 영역 장애에도 Secret 동기화 · 웹훅 검증이 이어진다
 nodeSelector:
   role: platform
 tolerations:
@@ -7,6 +8,19 @@ tolerations:
     operator: Equal
     value: platform
     effect: NoSchedule
+replicaCount: 2
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: external-secrets
+        app.kubernetes.io/instance: external-secrets
+    matchLabelKeys: [pod-template-hash]
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
 webhook:
   nodeSelector:
     role: platform
@@ -15,6 +29,19 @@ webhook:
       operator: Equal
       value: platform
       effect: NoSchedule
+  replicaCount: 2
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: external-secrets-webhook
+          app.kubernetes.io/instance: external-secrets
+      matchLabelKeys: [pod-template-hash]
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
 certController:
   nodeSelector:
     role: platform
@@ -23,3 +50,16 @@ certController:
       operator: Equal
       value: platform
       effect: NoSchedule
+  replicaCount: 2
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: external-secrets-cert-controller
+          app.kubernetes.io/instance: external-secrets
+      matchLabelKeys: [pod-template-hash]
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
