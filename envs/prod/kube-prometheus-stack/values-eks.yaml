@@ -2,12 +2,26 @@
 # 트래픽을 옮긴 뒤(LDP-202) 72 enable_singleton_workloads 가 root appValues 로 sns-alerts 를 넘긴다. 알림 규칙 · 하위 route 는 values.yaml 그대로
 #
 # 모니터링 구성 요소는 platform 노드에 (Terraform 72 nodes.tf platform 노드 그룹의 label · taint, LDP-248).
-# Prometheus EBS(PVC)는 platform 노드 영역(platform_az)에 생긴다. node-exporter 는 차트 기본값이 모든 NoSchedule taint 를 허용해 모든 노드에 뜬다
+# Prometheus EBS(PVC)는 처음 뜬 platform 노드의 영역에 생기고, 이후 그 영역에 묶인다. node-exporter 는 차트 기본값이 모든 NoSchedule taint 를 허용해 모든 노드에 뜬다
+# platform 노드는 영역마다 1대(LDP-259). 2개를 띄우는 건 Alertmanager 만 — 알림 경로라 한 영역 장애에도 나가야 하고, 2개가 서로 상태를
+# 나눠(gossip) 같은 알림을 두 번 보내지 않는다. Prometheus(EBS 영역 고정 · 수집 부하 2배) · Grafana(공유 DB 필요) · kube-state-metrics(지표 중복) · operator 는 1개
 alertmanager:
   config:
     route:
       receiver: "null"
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
   alertmanagerSpec:
+    replicas: 2
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: alertmanager
+            alertmanager: kube-prometheus-stack-alertmanager
     nodeSelector:
       role: platform
     tolerations:

@@ -7,3 +7,16 @@ tolerations:
     operator: Equal
     value: platform
     effect: NoSchedule
+
+# 영역마다 1개 (platform-a · platform-b, LDP-259). 리더 선출이라 일하는 건 1개, 나머지는 대기 — 한 영역 장애에도 확장 · 축소가 이어진다.
+# PDB 는 차트 기본값(maxUnavailable 1)
+replicaCount: 2
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/instance: cluster-autoscaler
+        app.kubernetes.io/name: aws-cluster-autoscaler
+    matchLabelKeys: [pod-template-hash]

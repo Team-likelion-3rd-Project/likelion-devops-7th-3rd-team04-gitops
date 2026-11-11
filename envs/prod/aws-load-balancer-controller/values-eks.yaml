@@ -7,3 +7,16 @@ tolerations:
     operator: Equal
     value: platform
     effect: NoSchedule
+
+# 차트 기본 2개를 영역마다 1개로 (platform-a · platform-b, LDP-259). 리더 선출 — 한 영역 장애에도 ALB · TG 갱신이 이어진다
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: aws-load-balancer-controller
+        app.kubernetes.io/instance: aws-load-balancer-controller
+    matchLabelKeys: [pod-template-hash]
+podDisruptionBudget:
+  maxUnavailable: 1

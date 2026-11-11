@@ -25,9 +25,12 @@ topologySpread:
 pdb:
   enabled: true
 
-# 챗봇은 HPA 없는 1개 고정 · 예약 경로 밖 · 실사용이 작아 platform 노드에 둔다 (앱 노드는 확장 대상 서비스만)
+# 챗봇은 HPA 없음 · 예약 경로 밖 · 실사용이 작아 platform 노드에 둔다 (앱 노드는 확장 대상 서비스만).
+# chat-bot · llm 은 2개 — platform 노드가 영역마다 1대라 차트 분산(노드별)으로 영역마다 1개가 된다 (LDP-259).
+# n8n 은 1개 — 일반 모드는 여러 개를 띄울 수 없다 (queue 모드 · Redis 필요). 한 영역 장애 때 챗봇 답변만 멈춘다
 services:
   chat-bot-service:
+    replicas: 2
     nodeSelector:
       role: platform
     tolerations:
@@ -36,6 +39,7 @@ services:
         value: platform
         effect: NoSchedule
   llm-service:
+    replicas: 2
     nodeSelector:
       role: platform
     tolerations:

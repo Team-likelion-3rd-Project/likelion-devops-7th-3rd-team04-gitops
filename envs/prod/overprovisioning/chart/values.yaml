@@ -1,0 +1,12 @@
+# 자리 수 · 크기. 한 자리 = 가장 먼저 늘어나는 Pod 1개 (api-gateway requests 와 같게)
+# 자리 합계는 "노드 1대에서 데몬셋을 뺀 만큼"(t3a.large ~1.5코어)에 맞춘다 — 작으면 자리 맡기가 띄운 노드에 빈자리가 덤으로 남아
+# 선점 · 다음 노드 선증설이 일어나지 않는다 (min_size 를 1 올린 것과 같아짐)
+# replicas 0 이면 자리를 비우지 않는다 (끄기)
+# 운영 1개 (부하 테스트 4차 검증 구성, LDP-259 · 3차 위키 8.4). gateway HPA min 4 와 함께 평소 노드 5대. platform 노드는 taint 로 못 들어가 앱 노드에만 뜬다
+replicas: 1
+resources:
+  requests: {cpu: 500m, memory: 128Mi}
+  limits: {cpu: 500m, memory: 128Mi}
+# 일반 Pod(0) 보다 낮아 밀려나고, CA 의 expendable-pods-priority-cutoff(-10) 보다 높아 CA 가 이 Pod 를 위해 노드를 늘린다
+priority: -1
+image: registry.k8s.io/pause:3.10

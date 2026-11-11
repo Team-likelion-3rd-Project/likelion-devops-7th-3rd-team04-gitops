@@ -9,7 +9,7 @@
 # 결제 쪽 계약(payment.proto, SQS 메시지, 결제 마이그레이션)이 바뀌는 배포는 이 파일을 먼저 merge·반영한 뒤 backend 를 올립니다.
 
 image:
-  imageTag: "77a0ec6afa3086e0cf6101e5a8498277b1937875" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
+  imageTag: "794f5265ade7a73708cfbe4829d26365e2a89ea8" # 릴리스 main 커밋 SHA (GitHub Actions release.yml)
   # 같은 태그로 아래 이미지를 씀 (레지스트리 · 저장소는 Terraform 이 정함 — 참고용)
   repositories:
     app: team04-hotel/payment-service
